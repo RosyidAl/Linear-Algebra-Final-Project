@@ -1,0 +1,57 @@
+.venv/
+ENV/
+env/
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# Virtual environment and env files
+.env
+.env.*
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+
+# Pytest
+.pytest_cache/
+coverage.xml
+.coverage
+htmlcov/
+
+# IPython/Jupyter
+.ipynb_checkpoints
+
+# Editor directories and system files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+Thumbs.db
+.DS_Store
+
+# Streamlit
+.streamlit/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# SQLite, databases
+*.sqlite3
+*.db
+
+# Python bytecode
+*$py.class
+
+# OneDrive sync artifacts
+~$*
