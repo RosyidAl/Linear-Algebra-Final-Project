@@ -1,150 +1,143 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image
+import base64
+import io
 
-# --- SETUP HALAMAN WEB ---
 st.set_page_config(page_title="SVD Medical Denoising", layout="wide")
-st.title("🩺 Aplikasi Denoising Citra Medis dengan SVD")
-st.write("Projek Aljabar Linear - Penerapan & Detail Komputasi Matriks")
-st.write("---")
+st.title("SVD Medical Image Denoising")
 
-# --- FUNGSI MEMBUAT GAMBAR SIMULASI (JIKA BELUM ADA UPLOAD) ---
-@st.cache_data
-def create_mock_medical_image():
-    # Membuat gambar ukuran kecil (20x20) agar angka matriksnya mudah dibaca di layar
-    img = Image.new("L", (20, 20), color=30)
-    draw = ImageDraw.Draw(img)
-    # Gambar bentuk kotak putih di tengah (simulasi objek medis/tulang)
-    draw.rectangle([5, 5, 14, 14], fill=180)
-    
-    # Tambahkan noise acak
-    np.random.seed(42)
-    img_array = np.array(img).astype(float)
-    noise = np.random.normal(0, 35, img_array.shape)
-    noisy_img = img_array + noise
-    return np.clip(noisy_img, 0, 255).astype(np.uint8)
 
-# --- SIDEBAR INPUT ---
-st.sidebar.header("⚙️ Konfigurasi")
-uploaded_file = st.sidebar.file_uploader("Unggah Foto Medis (Disarankan gambar kecil atau grayscale)", type=["png", "jpg", "jpeg"])
+def image_to_base64(img_pil):
+    buffer = io.BytesIO()
+    img_pil.save(buffer, format="PNG")
+    return base64.b64encode(buffer.getvalue()).decode()
 
-# Load gambar
-if uploaded_file is not None:
-    img = Image.open(uploaded_file).convert("L")
-    # Resize jika terlalu besar agar angka matriksnya tetap bisa ditampilkan tanpa membuat tabel terlalu padat
-    max_dim = 256
-    if img.size[0] > max_dim or img.size[1] > max_dim:
-        scale = max_dim / max(img.size)
-        new_size = (int(img.size[0] * scale), int(img.size[1] * scale))
-        img = img.resize(new_size)
-        st.sidebar.warning(
-            f"Gambar di-resize ke {img.size[0]}x{img.size[1]} agar angka matriksnya masih nyaman ditampilkan. "
-            "Nilai k maksimal akan mengikuti ukuran gambar ini."
-        )
-    A = np.array(img)
-else:
-    A = create_mock_medical_image()
-    st.sidebar.info("Menggunakan gambar simulasi grid 20x20 piksel agar matriks mudah dipelajari.")
 
+# Upload gambar
+uploaded_file = st.file_uploader("Upload medical image", type=["png", "jpg", "jpeg"])
+
+if uploaded_file is None:
+    st.stop()
+
+img = Image.open(uploaded_file).convert("L")
+if img.size[0] > 256 or img.size[1] > 256:
+    scale = 256 / max(img.size)
+    img = img.resize((int(img.size[0] * scale), int(img.size[1] * scale)))
+
+A = np.array(img)
 m, n = A.shape
 
-# --- PROSES KOMPUTASI SVD ---
+# SVD decomposition
 U, s, Vt = np.linalg.svd(A.astype(float), full_matrices=False)
-max_k = len(s)  # Rank maksimum (r) dari matriks
+rank_matrix = len(s)
+max_k_slider = max(m, n)
 
-# Tampilkan informasi rank matriks
-st.sidebar.info(
-    f"📊 **Informasi Rank Matriks:**\n\n"
-    f"Rank maksimum (r): **{max_k}**\n\n"
-    f"Dimensi matriks: {m} × {n}"
-)
+# Input k
+k = st.number_input(f"Jumlah Komponen (k) - Max: {max_k_slider}", min_value=1, max_value=max_k_slider, value=min(int(rank_matrix * 0.3), rank_matrix) or 1)
 
-# Slider Jumlah Komponen K
-st.sidebar.subheader("🎚️ Pilih Jumlah Komponen SVD")
-st.sidebar.write("Tentukan berapa banyak komponen SVD (k) yang digunakan untuk rekonstruksi gambar.")
-k = st.sidebar.slider(
-    label="Jumlah Komponen (k): ", 
-    min_value=1, 
-    max_value=max_k,
-    value=min(int(max_k * 0.3), max_k) if max_k > 3 else 1,
-    help=f"Pilih k dari 1 hingga {max_k}. Semakin besar k, semakin detail gambar (lebih mirip asli)."
-)
+# Reconstruct image
+if k <= rank_matrix:
+    U_k = U[:, :k]
+    s_k = s[:k]
+    Vt_k = Vt[:k, :]
+else:
+    U_k = np.column_stack([U, np.zeros((m, k - rank_matrix))])
+    s_k = np.concatenate([s, np.zeros(k - rank_matrix)])
+    Vt_k = np.vstack([Vt, np.zeros((k - rank_matrix, n))])
 
-# Ambil komponen k pertama (Truncated SVD)
-U_k = U[:, :k]
-s_k = s[:k]
 Sigma_k = np.diag(s_k)
-Vt_k = Vt[:k, :]
-
-# Jalankan perkalian matriks untuk rekonstruksi: A_clean = U_k * Sigma_k * Vt_k
 A_reconstructed = np.dot(U_k, np.dot(Sigma_k, Vt_k))
 A_reconstructed_clipped = np.clip(A_reconstructed, 0, 255).astype(np.uint8)
 
-# --- TAMPILKAN GAMBAR (BEFORE VS AFTER) ---
-col1, col2 = st.columns(2)
-with col1:
-    st.subheader("❌ Citra Asli (Banyak Noise)")
-    st.image(A, width=300)
-    st.caption(f"Dimensi Matriks Gambar Asli ($A$): **{m} x {n}**")
-
-with col2:
-    st.subheader(f"✅ Hasil Denoising (k = {k})")
-    st.image(A_reconstructed_clipped, width=300)
-    
-    # Tampilkan informasi kompresi
-    compression_ratio = (k * (m + n + 1)) / (m * n) * 100
-    energy_retained = (np.sum(s_k**2) / np.sum(s**2)) * 100
-    
-    st.caption(f"Direkonstruksi menggunakan **k = {k}** dari **r = {max_k}** komponen ({(k/max_k)*100:.1f}%)")
-    st.caption(f"📈 Energi yang dipertahankan: **{energy_retained:.2f}%**")
-    st.caption(f"📦 Rasio kompresi: **{compression_ratio:.2f}%**")
-
-# --- SECTION: DETAIL HITUNG-HITUNGAN MATRIKS ---
-st.write("---")
-st.subheader("🧮 Detail Langkah Komputasi Aljabar Linear")
-
-# Box informasi parameter k
-param_col1, param_col2, param_col3 = st.columns(3)
-with param_col1:
-    st.metric("Jumlah Komponen (k)", f"{k}", f"dari {max_k}")
-with param_col2:
-    st.metric("Persentase Komponen", f"{(k/max_k)*100:.1f}%", f"({k}/{max_k})")
-with param_col3:
-    st.metric("Energi Dipertahankan", f"{energy_retained:.2f}%", f"dari total energi")
-
-st.write("Catatan: Semakin besar nilai **k**, semakin banyak detail gambar yang dipertahankan. "
-         "Namun, noise juga akan terikut semakin banyak. Sebaliknya, **k yang kecil** menghasilkan denoising "
-         "yang lebih agresif tapi detail gambar akan hilang.")
+# Display
 st.write("---")
 
-st.write("Di bawah ini adalah angka asli dari matriks gambar kamu dan bagaimana SVD memotongnya secara matematis:")
+original_image = Image.fromarray(A)
+denosed_image = Image.fromarray(A_reconstructed_clipped)
+original_base64 = image_to_base64(original_image)
+denoised_base64 = image_to_base64(denosed_image)
+energy_retained = (np.sum(s_k**2) / np.sum(s**2)) * 100
 
-tab1, tab2, tab3 = st.tabs(["1. Matriks Gambar Asli (A)", "2. Komponen SVD Terpotong (Truncated)", "3. Hasil Perkalian U × Σ × Vᵀ"])
+comparison_html = f"""
+<div style="max-width: 900px; margin: auto;">
+  <h3 style="text-align: center;">Comparison: Original vs Denoised</h3>
+  <div class="img-comp-container" style="position: relative; width: 100%; max-width: 900px; overflow: hidden;">
+    <div class="img-comp-img" style="position: relative; width: 100%;">
+      <img src="data:image/png;base64,{original_base64}" style="display: block; width: 100%; height: auto;" />
+    </div>
+    <div class="img-comp-img img-comp-overlay" style="position: absolute; top: 0; left: 0; width: 50%; overflow: hidden;">
+      <img src="data:image/png;base64,{denoised_base64}" style="display: block; width: 100%; height: auto;" />
+    </div>
+    <div class="img-comp-slider" style="position: absolute; z-index: 9; top: 0; bottom: 0; left: 50%; width: 4px; background: rgba(255,255,255,0.8); cursor: ew-resize;" id="slider"></div>
+  </div>
+  <div style="display: flex; justify-content: space-between; margin-top: 0.75rem; font-size: 0.95rem; color: #ddd;">
+    <span>Size: {m} x {n}</span>
+    <span>Energy retained: {energy_retained:.2f}%</span>
+  </div>
+</div>
+<style>
+.img-comp-container img {{
+  vertical-align: middle;
+}}
+</style>
+<script>
+(function() {{
+  const container = document.querySelector(".img-comp-container");
+  const overlay = container.querySelector(".img-comp-overlay");
+  const slider = document.getElementById("slider");
+  let clicked = false;
+  const slideReady = () => clicked = true;
+  const slideFinish = () => clicked = false;
+  const slideMove = (x) => {{
+    const rect = container.getBoundingClientRect();
+    let pos = x - rect.left;
+    if (pos < 0) pos = 0;
+    if (pos > rect.width) pos = rect.width;
+    overlay.style.width = pos + "px";
+    slider.style.left = pos + "px";
+  }};
+  slider.addEventListener("mousedown", slideReady);
+  window.addEventListener("mouseup", slideFinish);
+  window.addEventListener("mousemove", (event) => {{
+    if (!clicked) return;
+    slideMove(event.pageX);
+  }});
+  slider.addEventListener("touchstart", slideReady);
+  window.addEventListener("touchend", slideFinish);
+  window.addEventListener("touchmove", (event) => {{
+    if (!clicked) return;
+    slideMove(event.touches[0].pageX);
+  }});
+}})();
+</script>
+"""
+
+components.html(comparison_html, height=520)
+st.write("---")
+
+# Info
+st.write(f"**Rank: {rank_matrix} | Dimension: {m} x {n}**")
+
+# Tables
+st.subheader("Computation Details")
+tab1, tab2, tab3 = st.tabs(["Matrix A", "SVD Components", "Result"])
 
 with tab1:
-    st.write(f"Matriks $A$ berukuran **{m} x {n}** (Setiap angka merepresentasikan kecerahan piksel 0-255):")
     st.dataframe(A)
 
 with tab2:
-    st.write(f"Berdasarkan nilai **k = {k}** yang kamu pilih, matriks dipecah menjadi:")
-    
     col_u, col_s, col_v = st.columns(3)
     with col_u:
-        st.write(f"**Matriks $U_k$** (Ukuran: {m} x {k})")
+        st.write(f"U_k ({m} x {k})")
         st.dataframe(U_k)
     with col_s:
-        st.write(f"**Matriks $\Sigma_k$** (Diagonal Nilai Singular, Ukuran: {k} x {k})")
+        st.write(f"Sigma_k ({k} x {k})")
         st.dataframe(Sigma_k)
     with col_v:
-        st.write(f"**Matriks $V_k^T$** (Ukuran: {k} x {n})")
+        st.write(f"V_k^T ({k} x {n})")
         st.dataframe(Vt_k)
 
 with tab3:
-    st.write("Proses rekonstruksi dilakukan dengan mengalikan ketiga matriks di atas:")
-    st.latex(r"A_{clean} = U_k \times \Sigma_k \times V_k^T")
-    
-    st.write("**Hasil perkalian matriks sebelum pembulatan (Float):**")
-    st.dataframe(A_reconstructed)
-    
-    st.write("**Hasil akhir setelah pembulatan nilai piksel (0 - 255):**")
     st.dataframe(A_reconstructed_clipped)
