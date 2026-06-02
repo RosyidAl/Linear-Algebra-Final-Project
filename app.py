@@ -1,163 +1,237 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import numpy as np
-from PIL import Image
+import cv2
+import matplotlib.pyplot as plt
+from scipy.linalg import svd
 
-from utils import image_to_base64, generate_synthetic_mri, reconstruct
-from styles import CUSTOM_CSS, get_header_html, get_direct_zoom_html
+# ==========================================
+# FUNGSI UTAMA PIPELINE WT-SVD
+# ==========================================
 
-# ─── KONFIGURASI HALAMAN UTAMA ────────────────────────────────────────────────
-st.set_page_config(
-    page_title="SVD Medical Image Denoising",
-    layout="wide"
-)
+def haar_dwt_2d(img):
+    """
+    Tahap 3: Forward Haar Wavelet Transform (Dekomposisi manual 1-Level)
+    Memisahkan gambar menjadi: LL (Inti), HL (Garis Tegak), LH (Garis Datar), HH (Bintik Detail/Noise)
+    """
+    h, w = img.shape
+    # Memastikan dimensi genap
+    if h % 2 != 0: img = img[:-1, :]
+    if w % 2 != 0: img = img[:, :-1]
+    h, w = img.shape
 
-st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
-st.markdown(get_header_html(), unsafe_allow_html=True)
+    # Transformasi Horizontal (Per Baris)
+    W_row = np.zeros_like(img, dtype=np.float64)
+    for i in range(h):
+        a = img[i, 0::2]
+        b = img[i, 1::2]
+        W_row[i, :w//2] = (a + b) / 2.0  # Low
+        W_row[i, w//2:] = (a - b) / 2.0  # High
 
-if 'app_launched' not in st.session_state:
-    st.session_state.app_launched = False
+    # Transformasi Vertikal (Per Kolom)
+    W_total = np.zeros_like(W_row, dtype=np.float64)
+    for j in range(w):
+        a = W_row[0::2, j]
+        b = W_row[1::2, j]
+        W_total[:h//2, j] = (a + b) / 2.0  # Low
+        W_total[h//2:, j] = (a - b) / 2.0  # High
 
-# ─── HALAMAN AWAL (LANDING PAGE) ─────────────────────────────────────────────
-if not st.session_state.app_launched:
-    col_spacer_left, col_left, col_right, col_spacer_right = st.columns([0.3, 1.3, 1.1, 0.3])
+    # Memecah matriks menjadi 4 sub-band (kuadran)
+    LL = W_total[:h//2, :w//2]
+    HL = W_total[:h//2, w//2:]
+    LH = W_total[h//2:, :w//2]
+    HH = W_total[h//2:, w//2:]
+    return LL, HL, LH, HH
+
+def haar_idwt_2d(LL, HL, LH, HH):
+    """
+    Tahap 5: Inverse Haar Wavelet Transform (Rekonstruksi manual 1-Level)
+    """
+    h_sub, w_sub = LL.shape
+    h, w = h_sub * 2, w_sub * 2
     
-    with col_left:
-        st.markdown("<p style='color:#0284C7; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; margin-top:2.5rem; margin-bottom:0.5rem;'>SVD WORKSPACE</p>", unsafe_allow_html=True)
-        st.markdown("""
-        <h1>
-            See SVD <br> Denoising <br> Come to Life
-        </h1>
-        <p style="color: #475569; font-size: 1.1rem; line-height: 1.6; max-width: 480px; margin-bottom: 2.5rem;">
-            Dekomposisi nilai singular untuk mereduksi noise pada citra diagnostik secara real-time. 
-            Kontrol aproksimasi low-rank secara interaktif untuk mempertahankan detail struktural anatomis medis.
-        </p>
-        """, unsafe_allow_html=True)
-        
-        st.markdown('<div class="launch-container">', unsafe_allow_html=True)
-        if st.button("Launch Visualizer →"):
-            st.session_state.app_launched = True
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-    with col_right:
-        svg_graphic = """
-        <svg viewBox="0 0 400 400" width="100%" height="100%" style="background: transparent; max-height: 400px; margin-top: 2rem;">
-            <defs>
-                <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#E2E8F0" stroke-width="1"/>
-                </pattern>
-            </defs>
-            <rect width="360" height="360" x="20" y="20" fill="url(#grid)" rx="16" stroke="#E2E8F0" stroke-width="1.5" />
-            <line x1="20" y1="200" x2="380" y2="200" stroke="#94A3B8" stroke-width="2" stroke-dasharray="4 4" />
-            <line x1="200" y1="20" x2="200" y2="380" stroke="#94A3B8" stroke-width="2" stroke-dasharray="4 4" />
-            <ellipse cx="200" cy="200" rx="110" ry="60" transform="rotate(-30, 200, 200)" fill="none" stroke="#0284C7" stroke-width="2.5" opacity="0.8"/>
-            <line x1="200" y1="200" x2="295" y2="145" stroke="#0369A1" stroke-width="3.5" />
-            <circle cx="295" cy="145" r="5" fill="#0369A1" />
-            <text x="310" y="145" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="14" fill="#0369A1">σ₁ u₁</text>
-            <line x1="200" y1="200" x2="170" y2="148" stroke="#38BDF8" stroke-width="3" />
-            <circle cx="170" cy="148" r="4" fill="#38BDF8" />
-            <text x="145" y="135" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="14" fill="#38BDF8">σ₂ u₂</text>
-            <rect x="35" y="35" width="130" height="40" rx="8" fill="white" stroke="#E2E8F0" stroke-width="1" />
-            <text x="47" y="60" font-family="'JetBrains Mono', monospace" font-size="13" font-weight="600" fill="#0F172A">A = U Σ Vᵀ</text>
-            <rect x="235" y="325" width="130" height="40" rx="8" fill="white" stroke="#E2E8F0" stroke-width="1" />
-            <text x="247" y="350" font-family="'JetBrains Mono', monospace" font-size="13" font-weight="600" fill="#0284C7">Rank-k Approx</text>
-        </svg>
-        """
-        components.html(svg_graphic, height=430)
-    st.stop()
+    # Rekombinasi menjadi matriks total frekuensi
+    W_total = np.zeros((h, w), dtype=np.float64)
+    W_total[:h_sub, :w_sub] = LL
+    W_total[:h_sub, w_sub:] = HL
+    W_total[h_sub:, :w_sub] = LH
+    W_total[h_sub:, w_sub:] = HH
 
-# ─── HALAMAN WORKSPACE UTAMA CITRA MEDIS ──────────────────────────────────────
-col_ws_ws_l, col_ws_content, col_ws_ws_r = st.columns([0.05, 0.9, 0.05])
+    # Rekonstruksi Vertikal (Per Kolom)
+    W_row = np.zeros_like(W_total, dtype=np.float64)
+    for j in range(w):
+        L = W_total[:h_sub, j]
+        H = W_total[h_sub:, j]
+        W_row[0::2, j] = L + H
+        W_row[1::2, j] = L - H
 
-with col_ws_content:
-    st.title("SVD Medical Image Denoising")
-    uploaded_file = st.file_uploader("Upload a medical image", type=["png", "jpg", "jpeg"])
+    # Rekonstruksi Horizontal (Per Baris)
+    img_reconstructed = np.zeros_like(W_row, dtype=np.float64)
+    for i in range(h):
+        L = W_row[i, :w_sub]
+        H = W_row[i, w_sub:]
+        img_reconstructed[i, 0::2] = L + H
+        img_reconstructed[i, 1::2] = L - H
 
-    if uploaded_file is not None:
-        img = Image.open(uploaded_file).convert("L")
-    else:
-        img_array = generate_synthetic_mri()
-        img = Image.fromarray(img_array)
+    return np.clip(img_reconstructed, 0, 255)
 
-    if img.size[0] > 512 or img.size[1] > 512:
-        scale = 512 / max(img.size)
-        img = img.resize((int(img.size[0] * scale), int(img.size[1] * scale)))
+def apply_svd_denoising(LL_matrix, k_values_to_keep):
+    """
+    Tahap 4: SVD Denoising pada Sub-band LL (Rangka Utama)
+    Membuang nilai singular terkecil yang didominasi noise
+    """
+    U, S_diag, Vt = svd(LL_matrix, full_matrices=False)
+    
+    # Membuat matriks diagonal S baru
+    S = np.zeros((S_diag.shape[0], S_diag.shape[0]))
+    # Hanya mempertahankan k nilai singular terbesar (Filter deviasi rendah/noise)
+    S[:k_values_to_keep, :k_values_to_keep] = np.diag(S_diag[:k_values_to_keep])
+    
+    # Rekonstruksi sub-band LL yang telah dibersihkan
+    LL_denoised = np.dot(U, np.dot(S, Vt))
+    return LL_denoised
 
-    A = np.array(img).astype(float)
-    m, n = A.shape
+# ==========================================
+# METRIKS EVALUASI (TAHAP 6)
+# ==========================================
 
-    U, s, Vt = np.linalg.svd(A, full_matrices=False)
-    rank_matrix = len(s)
+def calculate_metrics(original, processed):
+    mse = np.mean((original - processed) ** 2)
+    if mse == 0:
+        return 0, 0, float('inf'), float('inf')
+    rmse = np.sqrt(mse)
+    
+    # PSNR
+    max_pixel = 255.0
+    psnr = 20 * np.log10(max_pixel / rmse)
+    
+    # SNR Kontras Sederhana
+    signal_power = np.mean(original ** 2)
+    noise_power = np.mean((original - processed) ** 2)
+    snr = 10 * np.log10(signal_power / noise_power)
+    
+    return mse, rmse, psnr, snr
 
-    # ─── SECTION 1: MATRIKS ORIGINAL A ───
-    col_text_left, col_img_right = st.columns([0.8, 1.2])
-    with col_text_left:
-        st.markdown("""
-            <div style='padding-top: 1rem;'>
-                <h1 style='font-size: 3.5rem !important; margin-bottom: 1rem; line-height: 1.15;'>Analisis Karakteristik Matriks Citra Medis</h1>
-            </div>
-        """, unsafe_allow_html=True)
-    with col_img_right:
-        st.image(img, use_container_width=True)
+# ==========================================
+# INTERFACE STREAMLIT (DASHBOARD MVP)
+# ==========================================
 
-    st.write("**Representasi Nilai Matriks $A$:**")
-    st.dataframe(A.astype(np.uint8), use_container_width=True)
+st.title("MVP Pemrosesan Denoising Citra Medis (WT-SVD)")
+st.write("Aplikasi simulasi pengujian restorasi gambar berbasis pipeline dekomposisi Wavelet dan reduksi dimensi SVD.")
 
-    st.write("---")
+# Langkah 1: Input Citra Medis Asli (Menggunakan file uploader)
+uploaded_file = st.file_uploader("Unggah Citra Medis Asli (Format: PNG, JPG, BMP)", type=["png", "jpg", "jpeg", "bmp"])
 
-    # ─── SECTION 2: DEKOMPOSISI AWAL ───
-    st.header("Dekomposisi SVD Awal")
-    st.write("Hasil faktorisasi linear penuh sebelum reduksi: $A = U \\Sigma V^T$")
-    col_u, col_s, col_v = st.columns(3)
-    with col_u:
-        st.write(f"**Matriks Kiri $U$** ({m} × {rank_matrix})")
-        st.dataframe(U, use_container_width=True)
-    with col_s:
-        st.write(f"**Matriks Diagonal $\\Sigma$** ({rank_matrix} × {rank_matrix})")
-        st.dataframe(np.diag(s), use_container_width=True)
-    with col_v:
-        st.write(f"**Matriks Kanan Transpose $V^T$** ({rank_matrix} × {n})")
-        st.dataframe(Vt, use_container_width=True)
+if uploaded_file is not None:
+    # Konversi file ke array opencv grayscale
+    file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
+    original_img = cv2.imdecode(file_bytes, cv2.IMREAD_GRAYSCALE)
+    
+    # Normalisasi dimensi agar genap
+    h, w = original_img.shape
+    if h % 2 != 0 or w % 2 != 0:
+        original_img = original_img[:h-(h%2), :w-(w%2)]
+    
+    st.image(original_img, caption="Citra Medis Asli (Referensi)", width=300)
 
-    st.write("---")
-
-    # ─── SECTION 3: MENGATUR SINGULAR VALUE ───
-    st.header("Pengaturan Nilai Singular ($k$)")
-    st.write("Konfigurasikan nilai pemotongan rank k untuk mengeliminasi komponen berfrekuensi tinggi (noise).")
-
-    k = st.number_input(
-        f"Aproksimasi Rank k (Maks {rank_matrix})",
-        min_value=1, max_value=rank_matrix,
-        value=max(1, min(int(rank_matrix * 0.15), rank_matrix)),
-        key="k"
+    # ------------------------------------------------
+    # TAHAP 2: PEMODELAN SIMULASI NOISE GAUSSIAN
+    # ------------------------------------------------
+    st.header("1. Pemodelan & Variasi Tingkat Noise")
+    
+    # Parameter varians sesuai spesifikasi riset (skala diadaptasi ke rentang piksel 0-255)
+    noise_variance_selection = st.select_slider(
+        "Pilih Varians Gaussian Noise (Sesuai parameter uji):",
+        options=[0.02, 0.05, 0.09],
+        value=0.02
     )
-
-    A_mod, U_k, s_k, Vt_k = reconstruct(U, s, Vt, k, m, n)
-    energy = (np.sum(s_k**2) / np.sum(s**2)) * 100
-
-    st.write("---")
-
-    # ─── SECTION 4: HASIL AKHIR DARI MATRIKS A ───
-    st.header("Hasil Akhir dari Matriks A")
-
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Original Matrix Rank", rank_matrix)
-    m2.metric("Matrix Size", f"{m}×{n}")
-    m3.metric("Energy Retention", f"{energy:.2f}%")
-
-    st.write("")
-    st.write("**Komparasi Hasil Akhir (Gunakan Tombol Kontrol Pada Setiap Gambar Untuk Zoom & Drag):**")
     
-    # Memproses data gambar ke Base64 sebelum dimasukkan ke objek visualizer kustom
-    img_orig_b64 = image_to_base64(img)
-    img_mod_b64 = image_to_base64(Image.fromarray(A_mod))
+    # Konversi nilai varians relatif ke standar deviasi intensitas piksel 8-bit
+    sigma = np.sqrt(noise_variance_selection) * 255
+    
+    # Generate Gaussian Noise
+    np.random.seed(42)
+    gaussian_noise = np.random.normal(0, sigma, original_img.shape)
+    noisy_img = np.clip(original_img + gaussian_noise, 0, 255).astype(np.uint8)
+    
+    # Hitung metrik kerusakan citra awal
+    mse_n, rmse_n, psnr_n, snr_n = calculate_metrics(original_img, noisy_img)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.image(noisy_img, caption=f"Citra Rusak (Noise Var: {noise_variance_selection})", use_container_width=True)
+    with col2:
+        st.subheader("Metrik Kerusakan Awal")
+        st.text(f"MSE  : {mse_n:.4f}")
+        st.text(f"RMSE : {rmse_n:.4f}")
+        st.text(f"PSNR : {psnr_n:.4f} dB")
+        st.text(f"SNR  : {snr_n:.4f} dB")
 
-    # Memanggil Komponen HTML Interaksi Zoom Langsung dari styles.py
-    comparison_html = get_direct_zoom_html(img_orig_b64, img_mod_b64, k)
-    components.html(comparison_html, height=520)
+    # ------------------------------------------------
+    # TAHAP 3, 4, 5: ALGORITMA WT-SVD & REKONSTRUKSI
+    # ------------------------------------------------
+    st.header("2. Pemrosesan Algoritma & Sinergi")
+    
+    # Terapkan Tahap 3: Haar Wavelet Transform
+    LL, HL, LH, HH = haar_dwt_2d(noisy_img)
+    
+    # Terapkan Parameter Batas Potong Nilai Singular (SVD Thresholding)
+    max_singular_values = LL.shape[0]
+    # Default: mempertahankan 60% dari total komponen variasi utama untuk memisahkan noise
+    default_keep = int(max_singular_values * 0.6)
+    
+    k_keep = st.slider(
+        "Jumlah Nilai Singular Matriks LL yang Dipertahankan (SVD):", 
+        min_value=1, 
+        max_value=max_singular_values, 
+        value=default_keep
+    )
+    
+    # Terapkan Tahap 4: Reduksi Noise via SVD pada Sub-band LL
+    LL_denoised = apply_svd_denoising(LL, k_keep)
+    
+    # Terapkan Tahap 5: Sinergi dan Rekonstruksi Akhir (IWT)
+    # Sub-band detail (HL, LH, HH) dipertahankan untuk menjaga ketajaman tepi garis organ
+    denoised_img = haar_idwt_2d(LL_denoised, HL, LH, HH)
+    denoised_img_uint8 = denoised_img.astype(np.uint8)
 
-    st.write("")
-    st.write("**Log Data Matriks Hasil Akhir Rekonstruksi:**")
-    st.write(f"**Matriks Rekonstruksi $A_{{mod}}$ ($k={k}$)**")
-    st.dataframe(A_mod, use_container_width=True)
+    # ------------------------------------------------
+    # TAHAP 6: EVALUASI KINERJA METRIK OBJEKTIF
+    # ------------------------------------------------
+    st.header("3. Evaluasi Kinerja (Performance Assessment)")
+    
+    mse_d, rmse_d, psnr_d, snr_d = calculate_metrics(original_img, denoised_img_uint8)
+    
+    col3, col4 = st.columns(2)
+    with col3:
+        st.image(denoised_img_uint8, caption="Hasil Akhir Rekonstruksi WT-SVD", use_container_width=True)
+    with col4:
+        st.subheader("Metrik Hasil Pemurnian")
+        st.text(f"MSE  : {mse_d:.4f}")
+        st.text(f"RMSE : {rmse_d:.4f}")
+        st.text(f"PSNR : {psnr_d:.4f} dB")
+        st.text(f"SNR  : {snr_d:.4f} dB")
+        
+        # Validasi Indikator Keberhasilan Pipeline
+        st.subheader("Validasi Indikator Keberhasilan:")
+        if mse_d < mse_n and psnr_d > psnr_n:
+            st.success("✓ BERHASIL: Nilai MSE menurun dan nilai PSNR meningkat secara signifikan.")
+        else:
+            st.warning("! OPTIMALISASI: Parameter nilai SVD yang dipertahankan terlalu rendah/tinggi sehingga struktur ikut tereduksi.")
+
+    # Tampilan visualisasi visual perbandingan sub-band untuk analisis besok
+    with st.expander("Lihat Visualisasi Komponen Sub-band Frekuensi Haar WT"):
+        fig, axes = plt.subplots(2, 2, figsize=(6, 6))
+        axes[0, 0].imshow(LL, cmap='gray')
+        axes[0, 0].set_title('LL (Rangka Utama)')
+        axes[0, 1].imshow(HL, cmap='gray')
+        axes[0, 1].set_title('HL (Garis Tegak)')
+        axes[1, 0].imshow(LH, cmap='gray')
+        axes[1, 0].set_title('LH (Garis Datar)')
+        axes[1, 1].imshow(HH, cmap='gray')
+        axes[1, 1].set_title('HH (Bintik Noise)')
+        for ax in axes.flat:
+            ax.axis('off')
+        st.pyplot(fig)
+
+else:
+    st.info("Silakan unggah gambar sampel citra medis terlebih dahulu untuk memulai pengujian.")

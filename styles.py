@@ -76,7 +76,8 @@ h2, h3, h4 {
 [data-testid="stImage"], 
 [data-testid="stDataFrame"], 
 .stNumberInput, 
-[data-testid="stMetric"] {
+[data-testid="stMetric"],
+[data-testid="stTable"] {
   position: relative !important;
   background-color: #FFFFFF !important;
   padding: 1.25rem !important;
@@ -86,7 +87,7 @@ h2, h3, h4 {
   margin-bottom: 1.5rem !important;
 }
 
-[data-testid="stDataFrame"] {
+[data-testid="stDataFrame"], [data-testid="stTable"] {
   padding: 0 !important;
   overflow: hidden !important;
 }
@@ -222,8 +223,8 @@ def get_header_html():
     return """
     <div class="custom-header">
         <div class="header-left">
-            <div class="logo-icon">SVD</div>
-            <div class="brand-name">SVD STUDIO</div>
+            <div class="logo-icon">WT-SVD</div>
+            <div class="brand-name">HYBRID STUDIO</div>
         </div>
         <div class="header-menu">
             <span class="menu-item-active">DENOISING VISUALIZER</span>
@@ -231,7 +232,7 @@ def get_header_html():
             <span class="menu-item-disabled">DOCUMENTATION</span>
         </div>
         <div class="header-right">
-            <span class="status-badge">v1.0 Pro</span>
+            <span class="status-badge">v2.0 Hybrid</span>
         </div>
     </div>
     """
@@ -321,7 +322,7 @@ def get_direct_zoom_html(img_orig_b64, img_mod_b64, k):
 
     <div class="wrapper">
       <div class="panel" id="panel-left">
-        <div class="panel-header">Gambar Asli</div>
+        <div class="panel-header">Gambar Input (Noisy)</div>
         <div class="control-panel">
             <button class="control-btn" onclick="zoom('left', 0.2)">+</button>
             <button class="control-btn" onclick="zoom('left', -0.2)">-</button>
@@ -330,11 +331,11 @@ def get_direct_zoom_html(img_orig_b64, img_mod_b64, k):
         <div class="view-container" id="view-left">
             <img src="data:image/png;base64,{img_orig_b64}" id="img-left" />
         </div>
-        <div class="panel-footer"><span>Full Rank</span></div>
+        <div class="panel-footer"><span>Spasial Domain Awal</span></div>
       </div>
 
       <div class="panel" id="panel-right">
-        <div class="panel-header">Gambar Dimodifikasi <span class="badge">k = {k}</span></div>
+        <div class="panel-header">Hasil Rekonstruksi Hibrida <span class="badge">k = {k}</span></div>
         <div class="control-panel">
             <button class="control-btn" onclick="zoom('right', 0.2)">+</button>
             <button class="control-btn" onclick="zoom('right', -0.2)">-</button>
@@ -343,7 +344,7 @@ def get_direct_zoom_html(img_orig_b64, img_mod_b64, k):
         <div class="view-container" id="view-right">
             <img src="data:image/png;base64,{img_mod_b64}" id="img-right" />
         </div>
-        <div class="panel-footer"><span>Rank-{k} approx.</span></div>
+        <div class="panel-footer"><span>Domain Inverse-DWT (LL Rank-{k} + Detail Filtered)</span></div>
       </div>
     </div>
 
