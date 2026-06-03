@@ -1,6 +1,7 @@
 import streamlit as st
 import numpy as np
 import cv2
+import pandas as pd
 from scipy.linalg import svd
 
 # ==========================================
@@ -34,7 +35,6 @@ def haar_dwt_2d(img):
     HH = W_total[h//2:, w//2:]
     return LL, HL, LH, HH
 
-
 def haar_idwt_2d(LL, HL, LH, HH):
     h_sub, w_sub = LL.shape
     h, w = h_sub * 2, w_sub * 2
@@ -61,43 +61,48 @@ def haar_idwt_2d(LL, HL, LH, HH):
 
     return np.clip(img_rec, 0, 255)
 
+def soft_threshold(data, threshold):
+    return np.sign(data) * np.maximum(np.abs(data) - threshold, 0)
+
 # ==========================================
-# 2. SVD PADA SUB-BAND LL
+# 2. FUNGSI SVD
 # ==========================================
 
-def apply_svd_ll(ll_matrix, k):
-    img_data = ll_matrix.astype(np.float64)
-    
-    # I_mn = U_mm * S_mn * V^T_nn
+def apply_svd_matrix(matrix, k):
+    img_data = matrix.astype(np.float64)
     U, S, Vt = svd(img_data, full_matrices=False)
-    
     k = min(k, len(S))
     S_filtered = S.copy()
     S_filtered[k:] = 0.0
-    
     denoised_matrix = np.dot(U, np.dot(np.diag(S_filtered), Vt))
     return denoised_matrix
 
 # ==========================================
-# 3. METRIK EVALUASI (PSNR)
+# 3. METRIK EVALUASI
 # ==========================================
 
-def calculate_psnr_only(original, processed):
+def calculate_all_metrics(original, processed):
     orig = original.astype(np.float64)
     proc = processed.astype(np.float64)
     mse = np.mean((orig - proc) ** 2)
+    
     if mse == 0:
-        return float('inf')
+        return 0.0, float('inf'), float('inf')
+        
     rmse = np.sqrt(mse)
     psnr = 20 * np.log10(255.0 / rmse)
-    return psnr
+    
+    signal_power = np.mean(orig ** 2)
+    snr = 10 * np.log10(signal_power / mse)
+    
+    return rmse, psnr, snr
 
 # ==========================================
 # 4. ANTARMUKA STREAMLIT UI
 # ==========================================
 
-st.set_page_config(page_title="WT-SVD Denoising", layout="wide")
-st.title("🩺 Pemrosesan Denoising Citra Medis (Kombinasi WT-SVD)")
+st.set_page_config(page_title="WT-SVD Denoising Evaluator", layout="wide")
+st.title("🩺 Evaluasi Metode Denoising Citra Medis")
 
 uploaded_file = st.file_uploader(
     "Unggah Citra Medis (PNG / JPG / BMP)",
@@ -112,90 +117,126 @@ if uploaded_file is not None:
     original_img = original_img[:h - (h % 2), :w - (w % 2)]
     h, w = original_img.shape
 
-    st.header("📊 Properti Citra Asli")
+    st.header("1. Properti Citra Asli & Pemodelan Noise")
     
-    col_p1, col_p2, col_p3, col_p4 = st.columns(4)
-    with col_p1:
-        st.metric("Resolusi", f"{w} x {h} px")
-    with col_p2:
-        st.metric("Aspek Rasio", f"{w/h:.2f}:1")
-    with col_p3:
-        st.metric("Ukuran File", f"{len(file_bytes)/1024:.2f} KB")
-    with col_p4:
-        st.metric("Total Piksel", f"{original_img.size:,}")
+    col_img, col_noise = st.columns([1, 2])
+    with col_img:
+        st.image(original_img, caption=f"Citra Asli ({w}x{h})", use_container_width=True)
+    
+    with col_noise:
+        noise_var = st.select_slider(
+            "Pilih Varians Noise (σ²):",
+            options=[0.02, 0.05, 0.09, 0.15, 0.30],
+            value=0.05
+        )
+        sigma = np.sqrt(noise_var) * 255
+        np.random.seed(42)
+        noisy_img = np.clip(
+            original_img.astype(np.float64) + np.random.normal(0, sigma, original_img.shape),
+            0, 255
+        ).astype(np.uint8)
 
-    col_p5, col_p6, col_p7, col_p8 = st.columns(4)
-    with col_p5:
-        st.metric("Tipe Data", str(original_img.dtype))
-    with col_p6:
-        st.metric("Piksel Min", f"{np.min(original_img)}")
-    with col_p7:
-        st.metric("Piksel Max", f"{np.max(original_img)}")
-    with col_p8:
-        st.metric("Intensitas Rata-rata", f"{np.mean(original_img):.2f}")
+        rmse_n, psnr_n, snr_n = calculate_all_metrics(original_img, noisy_img)
+        
+        st.image(noisy_img, caption=f"Citra Rusak (Var: {noise_var} | PSNR: {psnr_n:.2f} dB)", width=250)
 
     st.divider()
-    st.image(original_img, caption="Citra Asli", width=320)
+    st.header("2. Pemrosesan Denoising")
 
-    st.header("1. Pemodelan Noise Gaussian")
-    noise_var = st.select_slider(
-        "Pilih Varians Noise (σ²):",
-        options=[0.02, 0.05, 0.09, 0.15, 0.30],
-        value=0.05
-    )
+    tab1, tab2, tab3 = st.tabs(["Metode WT Murni", "Metode SVD Murni", "Kombinasi WT-SVD"])
+
+    # Variabel untuk menampung hasil
+    img_wt = img_svd = img_wtsvd = None
+
+    # --- TAB 1: WT MURNI ---
+    with tab1:
+        st.subheader("Wavelet Transform Denoising (Soft Thresholding)")
+        thresh_multiplier = st.slider("Multiplier Threshold WT", 0.1, 5.0, 1.0, step=0.1)
+        
+        LL, HL, LH, HH = haar_dwt_2d(noisy_img)
+        
+        # Kalkulasi universal threshold berdasarkan dimensi citra dan noise variance
+        threshold = sigma * np.sqrt(2 * np.log(h * w)) * thresh_multiplier
+        
+        HL_t = soft_threshold(HL, threshold)
+        LH_t = soft_threshold(LH, threshold)
+        HH_t = soft_threshold(HH, threshold)
+        
+        img_wt = haar_idwt_2d(LL, HL_t, LH_t, HH_t).astype(np.uint8)
+        rmse_wt, psnr_wt, snr_wt = calculate_all_metrics(original_img, img_wt)
+        
+        c1, c2 = st.columns(2)
+        c1.image(img_wt, caption="Hasil WT Murni", use_container_width=True)
+        c2.metric("PSNR WT", f"{psnr_wt:.4f} dB", delta=f"{psnr_wt - psnr_n:+.4f} dB")
+
+    # --- TAB 2: SVD MURNI ---
+    with tab2:
+        st.subheader("Singular Value Decomposition (Full Image)")
+        max_k_full = min(h, w)
+        k_svd = st.slider("Jumlah Rank (k) SVD Murni", 1, max_k_full, int(max_k_full * 0.15))
+        
+        img_svd = apply_svd_matrix(noisy_img, k_svd)
+        img_svd = np.clip(img_svd, 0, 255).astype(np.uint8)
+        rmse_svd, psnr_svd, snr_svd = calculate_all_metrics(original_img, img_svd)
+        
+        c1, c2 = st.columns(2)
+        c1.image(img_svd, caption="Hasil SVD Murni", use_container_width=True)
+        c2.metric("PSNR SVD", f"{psnr_svd:.4f} dB", delta=f"{psnr_svd - psnr_n:+.4f} dB")
+
+    # --- TAB 3: WT-SVD KOMB ---
+    with tab3:
+        st.subheader("Kombinasi SVD pada Sub-band LL")
+        LL_komb, HL_komb, LH_komb, HH_komb = haar_dwt_2d(noisy_img)
+        max_k_komb = min(LL_komb.shape)
+        
+        k_wtsvd = st.slider("Jumlah Rank (k) Sub-band LL", 1, max_k_komb, int(max_k_komb * 0.40))
+        
+        LL_denoised = apply_svd_matrix(LL_komb, k_wtsvd)
+        img_wtsvd = haar_idwt_2d(LL_denoised, HL_komb, LH_komb, HH_komb).astype(np.uint8)
+        
+        rmse_wtsvd, psnr_wtsvd, snr_wtsvd = calculate_all_metrics(original_img, img_wtsvd)
+        
+        c1, c2 = st.columns(2)
+        c1.image(img_wtsvd, caption="Hasil Kombinasi WT-SVD", use_container_width=True)
+        c2.metric("PSNR WT-SVD", f"{psnr_wtsvd:.4f} dB", delta=f"{psnr_wtsvd - psnr_n:+.4f} dB")
+
+    st.divider()
     
-    sigma = np.sqrt(noise_var) * 255
-    np.random.seed(42)
-    noisy_img = np.clip(
-        original_img.astype(np.float64) + np.random.normal(0, sigma, original_img.shape),
-        0, 255
-    ).astype(np.uint8)
-
-    psnr_n = calculate_psnr_only(original_img, noisy_img)
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.image(noisy_img, caption=f"Citra Rusak Noise (var={noise_var})", use_container_width=True)
-    with col2:
-        st.subheader("Metrik Kerusakan")
-        st.metric("PSNR Noisy", f"{psnr_n:.4f} dB")
-
-    st.header("2. Pipeline WT-SVD")
-
-    # Dekomposisi WT
-    LL, HL, LH, HH = haar_dwt_2d(noisy_img)
-
-    max_k = LL.shape[0]
-    default_k = max(1, int(max_k * 0.40))   
-
-    k_keep = st.slider(
-        "Jumlah Singular Values LL Dipertahankan (k):",
-        min_value=1,
-        max_value=max_k,
-        value=default_k
-    )
-
-    # Reduksi SVD pada LL
-    LL_denoised = apply_svd_ll(LL, k_keep)
-
-    # Rekonstruksi IDWT
-    denoised_img = haar_idwt_2d(LL_denoised, HL, LH, HH).astype(np.uint8)
-
-    st.header("3. Evaluasi Kinerja")
-    psnr_d = calculate_psnr_only(original_img, denoised_img)
-
-    col3, col4 = st.columns(2)
-    with col3:
-        st.image(denoised_img, caption="Hasil Kombinasi WT-SVD", use_container_width=True)
-    with col4:
-        st.subheader("Metrik Hasil Pembersihan")
-        st.metric("PSNR", f"{psnr_d:.4f} dB", delta=f"{psnr_d - psnr_n:+.4f} dB")
-
-        st.divider()
-        if psnr_d > psnr_n:
-            st.success("Terdapat peningkatan kualitas PSNR.")
-        else:
-            st.warning("Penyesuaian nilai k diperlukan karena PSNR menurun atau stagnan.")
+    st.header("3. Tabel Komparasi Metrik Evaluasi Akhir")
+    st.write(f"**Kondisi Pengujian:** Varians Noise = {noise_var}")
+    
+    df_metrics = pd.DataFrame({
+        "Skenario": [
+            "Citra Asli (Ground Truth)", 
+            f"Citra Noisy (Var: {noise_var})", 
+            "Denoised: WT Murni", 
+            f"Denoised: SVD Murni (k={k_svd})", 
+            f"Denoised: WT-SVD (k={k_wtsvd})"
+        ],
+        "RMSE": [
+            "0.0000", 
+            f"{rmse_n:.4f}", 
+            f"{rmse_wt:.4f}", 
+            f"{rmse_svd:.4f}", 
+            f"{rmse_wtsvd:.4f}"
+        ],
+        "PSNR (dB)": [
+            "∞", 
+            f"{psnr_n:.4f}", 
+            f"{psnr_wt:.4f}", 
+            f"{psnr_svd:.4f}", 
+            f"{psnr_wtsvd:.4f}"
+        ],
+        "SNR (dB)": [
+            "∞", 
+            f"{snr_n:.4f}", 
+            f"{snr_wt:.4f}", 
+            f"{snr_svd:.4f}", 
+            f"{snr_wtsvd:.4f}"
+        ]
+    })
+    
+    st.table(df_metrics)
 
 else:
     st.info("Unggah citra medis terlebih dahulu.")
