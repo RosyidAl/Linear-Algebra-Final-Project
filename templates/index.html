@@ -7,107 +7,187 @@
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-  <div class="page-shell">
-    <header class="page-header">
-      <div>
-        <h1>WT-SVD Denoising Evaluator</h1>
-        <p>Unggah citra medis, terapkan noise Gaussian, dan bandingkan hasil WT, SVD, dan WT-SVD.</p>
+  <div class="custom-header">
+    <div class="header-left">
+      <div class="logo-icon">WT-SVD</div>
+      <div class="brand-name">WT-SVD Denoising Evaluator</div>
+    </div>
+    <div class="header-right">
+      <div class="status-badge">Demo</div>
+    </div>
+  </div>
+
+  <main class="main">
+    <div class="block-container">
+      <div class="block grid">
+        <div>
+          <section class="card">
+            <h2>Pengaturan Input</h2>
+            <form id="main-form" method="post" enctype="multipart/form-data">
+              <div class="field-group">
+                <label for="image">Unggah Citra Medis (PNG / JPG / BMP)</label>
+                <div class="file-uploader">
+                  <input type="file" id="image" name="image" accept="image/png, image/jpeg, image/bmp" />
+                  <small>Biarkan kosong untuk menggunakan citra contoh sintetis.</small>
+                </div>
+              </div>
+
+              <div class="field-row">
+                <label for="noise_var">Varians Noise (σ²)</label>
+                <select id="noise_var" name="noise_var">
+                  {% for value in noise_options %}
+                  <option value="{{ value }}" {% if form_data.noise_var == value %}selected{% endif %}>{{ value }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div class="field-row">
+                <label for="wt_multiplier">Multiplier Threshold WT</label>
+                <input type="number" id="wt_multiplier" name="wt_multiplier" min="0.1" max="5.0" step="0.1" value="{{ form_data.wt_multiplier }}" />
+              </div>
+
+              <div class="field-row">
+                <label for="k_svd">Rank k untuk SVD Murni</label>
+                <input type="number" id="k_svd" name="k_svd" min="1" max="256" value="{{ form_data.k_svd }}" />
+              </div>
+
+              <div class="field-row">
+                <label for="k_wtsvd">Rank k untuk LL pada WT-SVD</label>
+                <input type="number" id="k_wtsvd" name="k_wtsvd" min="1" max="256" value="{{ form_data.k_wtsvd }}" />
+              </div>
+
+              <button type="submit" class="button">Proses Sekarang</button>
+            </form>
+          </section>
+        </div>
+
+        <aside>
+          <section class="card">
+            <h3>Preview</h3>
+            <img id="preview-img" class="preview" src="" alt="Preview" style="display:none" />
+          </section>
+        </aside>
       </div>
-    </header>
-
-    <main>
-      <section class="card form-card">
-        <h2>Pengaturan Input</h2>
-        <form method="post" enctype="multipart/form-data">
-          <div class="field-group">
-            <label for="image">Unggah Citra Medis (PNG / JPG / BMP)</label>
-            <input type="file" id="image" name="image" accept="image/png, image/jpeg, image/bmp" />
-            <small>Biarkan kosong untuk menggunakan citra contoh sintetis.</small>
-          </div>
-
-          <div class="field-row">
-            <label for="noise_var">Varians Noise (σ²)</label>
-            <select id="noise_var" name="noise_var">
-              {% for value in noise_options %}
-              <option value="{{ value }}" {% if form_data.noise_var == value %}selected{% endif %}>{{ value }}</option>
-              {% endfor %}
-            </select>
-          </div>
-
-          <div class="field-row">
-            <label for="wt_multiplier">Multiplier Threshold WT</label>
-            <input type="number" id="wt_multiplier" name="wt_multiplier" min="0.1" max="5.0" step="0.1" value="{{ form_data.wt_multiplier }}" />
-          </div>
-
-          <div class="field-row">
-            <label for="k_svd">Rank k untuk SVD Murni</label>
-            <input type="number" id="k_svd" name="k_svd" min="1" max="256" value="{{ form_data.k_svd }}" />
-          </div>
-
-          <div class="field-row">
-            <label for="k_wtsvd">Rank k untuk LL pada WT-SVD</label>
-            <input type="number" id="k_wtsvd" name="k_wtsvd" min="1" max="256" value="{{ form_data.k_wtsvd }}" />
-          </div>
-
-          <button type="submit" class="button">Proses Sekarang</button>
-        </form>
-      </section>
 
       {% if result %}
-      <section class="card results-card">
-        <h2>Hasil Denoising</h2>
+      <div class="block">
+        <section class="card">
+          <h2>Hasil Denoising</h2>
+          <div class="grid">
+            <div>
+              <h4>Citra Asli</h4>
+              <img src="{{ result.original_data }}" class="preview" />
+            </div>
+            <div>
+              <h4>Citra Noisy</h4>
+              <img src="{{ result.noisy_data }}" class="preview" />
+            </div>
+            <div>
+              <h4>WT Murni</h4>
+              <img src="{{ result.wt_data }}" class="preview" />
+            </div>
+            <div>
+              <h4>SVD Murni</h4>
+              <img src="{{ result.svd_data }}" class="preview" />
+            </div>
+            <div>
+              <h4>WT-SVD</h4>
+              <img src="{{ result.wtsvd_data }}" class="preview" />
+            </div>
+          </div>
 
-        <div class="images-grid">
-          <div>
-            <h3>Citra Asli</h3>
-            <img src="{{ result.original_data }}" alt="Original image" />
+          <div class="metrics">
+            <h3>Perbandingan Metrik</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Metrik</th>
+                  <th>Citra Noisy</th>
+                  <th>WT Murni</th>
+                  <th>SVD Murni</th>
+                  <th>WT-SVD</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in result.metrics_table %}
+                <tr>
+                  <td>{{ row.label }}</td>
+                  <td>{{ row.original }}</td>
+                  <td>{{ row.wt }}</td>
+                  <td>{{ row.svd }}</td>
+                  <td>{{ row.wtsvd }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
           </div>
-          <div>
-            <h3>Citra Noisy</h3>
-            <img src="{{ result.noisy_data }}" alt="Noisy image" />
-          </div>
-          <div>
-            <h3>WT Murni</h3>
-            <img src="{{ result.wt_data }}" alt="WT image" />
-          </div>
-          <div>
-            <h3>SVD Murni</h3>
-            <img src="{{ result.svd_data }}" alt="SVD image" />
-          </div>
-          <div>
-            <h3>WT-SVD</h3>
-            <img src="{{ result.wtsvd_data }}" alt="WT-SVD image" />
-          </div>
-        </div>
-
-        <div class="metrics-card">
-          <h3>Perbandingan Metrik</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Metrik</th>
-                <th>Citra Noisy</th>
-                <th>WT Murni</th>
-                <th>SVD Murni</th>
-                <th>WT-SVD</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in result.metrics_table %}
-              <tr>
-                <td>{{ row.label }}</td>
-                <td>{{ row.original }}</td>
-                <td>{{ row.wt }}</td>
-                <td>{{ row.svd }}</td>
-                <td>{{ row.wtsvd }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </section>
+        </section>
+      </div>
       {% endif %}
-    </main>
-  </div>
+
+    </div>
+  </main>
+
+  <script>
+  // Client-side image resize before upload to avoid Vercel payload limits
+  const input = document.getElementById('image');
+  const preview = document.getElementById('preview-img');
+  const form = document.getElementById('main-form');
+
+  input.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) { preview.style.display = 'none'; return; }
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      preview.src = ev.target.result;
+      preview.style.display = 'block';
+    }
+    reader.readAsDataURL(file);
+  });
+
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+
+    const file = input.files[0];
+    const fd = new FormData();
+
+    // append numeric fields
+    fd.append('noise_var', document.getElementById('noise_var').value);
+    fd.append('wt_multiplier', document.getElementById('wt_multiplier').value);
+    fd.append('k_svd', document.getElementById('k_svd').value);
+    fd.append('k_wtsvd', document.getElementById('k_wtsvd').value);
+
+    if (file) {
+      // resize image using canvas
+      const img = new Image();
+      const dataUrl = await new Promise((res) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result);
+        r.readAsDataURL(file);
+      });
+      img.src = dataUrl;
+      await new Promise((res) => img.onload = res);
+
+      const maxDim = 1024; // max width/height
+      let { width, height } = img;
+      let scale = Math.min(1, maxDim / Math.max(width, height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(width * scale);
+      canvas.height = Math.round(height * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+      fd.append('image', blob, file.name.replace(/\.[^.]+$/, '.jpg'));
+    }
+
+    // submit via fetch and replace page content with response
+    const resp = await fetch('/', { method: 'POST', body: fd });
+    const text = await resp.text();
+    document.open();
+    document.write(text);
+    document.close();
+  });
+  </script>
 </body>
 </html>
