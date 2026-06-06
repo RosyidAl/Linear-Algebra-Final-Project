@@ -1,7 +1,7 @@
 import base64
 import math
-
-import cv2
+import io
+from PIL import Image
 import numpy as np
 from flask import Flask, render_template, request
 
@@ -28,8 +28,10 @@ DEFAULTS = {
 
 
 def image_to_data_uri(img: np.ndarray) -> str:
-    _, buffer = cv2.imencode(".png", img)
-    data = base64.b64encode(buffer).decode("ascii")
+    pil = Image.fromarray(img.astype(np.uint8))
+    buf = io.BytesIO()
+    pil.save(buf, format="PNG")
+    data = base64.b64encode(buf.getvalue()).decode("ascii")
     return f"data:image/png;base64,{data}"
 
 
@@ -75,9 +77,10 @@ def process_image(file_bytes, noise_var, wt_multiplier, k_svd, k_wtsvd):
     if file_bytes is None:
         original = generate_synthetic_mri()
     else:
-        array = np.frombuffer(file_bytes, dtype=np.uint8)
-        original = cv2.imdecode(array, cv2.IMREAD_GRAYSCALE)
-        if original is None:
+        try:
+            pil = Image.open(io.BytesIO(file_bytes)).convert("L")
+            original = np.array(pil)
+        except Exception:
             original = generate_synthetic_mri()
 
     original = ensure_even_dimensions(original)
