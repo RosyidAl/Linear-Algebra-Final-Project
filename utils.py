@@ -1,8 +1,78 @@
+import streamlit as st
 import numpy as np
 from PIL import Image
 import base64
 import io
 import pywt
+
+
+def ensure_even_dimensions(img: np.ndarray) -> np.ndarray:
+    h, w = img.shape
+    return img[: h - (h % 2), : w - (w % 2)] if (h % 2 or w % 2) else img
+
+
+def calculate_noise_sigma(noise_var: float, max_pixel: float = 255.0) -> float:
+    return np.sqrt(noise_var) * max_pixel
+
+
+def add_gaussian_noise(img: np.ndarray, noise_var: float, seed: int = 42, max_pixel: float = 255.0):
+    sigma = calculate_noise_sigma(noise_var, max_pixel)
+    rng = np.random.default_rng(seed)
+    noisy_img = img.astype(np.float64) + rng.normal(0, sigma, img.shape)
+    return np.clip(noisy_img, 0, max_pixel).astype(np.uint8), sigma
+
+
+@st.cache_data(show_spinner=False)
+def haar_dwt_2d(img: np.ndarray):
+    img = img.astype(np.float64)
+    h, w = img.shape
+    if h % 2 != 0:
+        img = img[:-1, :]
+    if w % 2 != 0:
+        img = img[:, :-1]
+
+    LL, (cH, cV, cD) = pywt.dwt2(img, 'haar', mode='periodization')
+    return LL, cV, cH, cD
+
+
+@st.cache_data(show_spinner=False)
+def haar_idwt_2d(LL: np.ndarray, HL: np.ndarray, LH: np.ndarray, HH: np.ndarray):
+    reconstructed = pywt.idwt2((LL, (LH, HL, HH)), 'haar', mode='periodization')
+    return np.clip(reconstructed, 0, 255)
+
+
+def soft_threshold(data: np.ndarray, threshold: float):
+    return np.sign(data) * np.maximum(np.abs(data) - threshold, 0)
+
+
+@st.cache_data(show_spinner=False)
+def apply_svd_matrix(matrix: np.ndarray, k: int):
+    img_data = matrix.astype(np.float64)
+    U, S, Vt = np.linalg.svd(img_data, full_matrices=False)
+    k = min(k, len(S))
+    U_k = U[:, :k]
+    Vt_k = Vt[:k, :]
+    denoised_matrix = (U_k * S[:k]) @ Vt_k
+
+    energy_retained = (np.sum(S[:k] ** 2) / np.sum(S**2)) * 100 if np.sum(S**2) > 0 else 0.0
+    return denoised_matrix, energy_retained
+
+
+def calculate_all_metrics(original: np.ndarray, processed: np.ndarray):
+    orig = original.astype(np.float64)
+    proc = processed.astype(np.float64)
+    mse = np.mean((orig - proc) ** 2)
+
+    if mse == 0:
+        return 0.0, float("inf"), float("inf")
+
+    rmse = np.sqrt(mse)
+    psnr = 20 * np.log10(255.0 / rmse)
+    signal_power = np.mean(orig**2)
+    snr = 10 * np.log10(signal_power / mse)
+
+    return rmse, psnr, snr
+
 
 def image_to_base64(img_pil: Image.Image) -> str:
     buf = io.BytesIO()

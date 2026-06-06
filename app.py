@@ -2,109 +2,25 @@ import streamlit as st
 import numpy as np
 import cv2
 import pandas as pd
-from scipy.linalg import svd
-
-# ==========================================
-# 1. FUNGSI TRANSFORMASI WAVELET (HAAR DWT)
-# ==========================================
-
-def haar_dwt_2d(img):
-    img = img.astype(np.float64)
-    h, w = img.shape
-    if h % 2 != 0: img = img[:-1, :]
-    if w % 2 != 0: img = img[:, :-1]
-    h, w = img.shape
-
-    W_row = np.zeros_like(img, dtype=np.float64)
-    for i in range(h):
-        a = img[i, 0::2]
-        b = img[i, 1::2]
-        W_row[i, :w//2] = (a + b) / np.sqrt(2.0)
-        W_row[i, w//2:] = (a - b) / np.sqrt(2.0)
-
-    W_total = np.zeros_like(W_row, dtype=np.float64)
-    for j in range(w):
-        a = W_row[0::2, j]
-        b = W_row[1::2, j]
-        W_total[:h//2, j] = (a + b) / np.sqrt(2.0)
-        W_total[h//2:, j] = (a - b) / np.sqrt(2.0)
-
-    LL = W_total[:h//2, :w//2]
-    HL = W_total[:h//2, w//2:]
-    LH = W_total[h//2:, :w//2]
-    HH = W_total[h//2:, w//2:]
-    return LL, HL, LH, HH
-
-def haar_idwt_2d(LL, HL, LH, HH):
-    h_sub, w_sub = LL.shape
-    h, w = h_sub * 2, w_sub * 2
-
-    W_total = np.zeros((h, w), dtype=np.float64)
-    W_total[:h_sub, :w_sub] = LL
-    W_total[:h_sub, w_sub:] = HL
-    W_total[h_sub:, :w_sub] = LH
-    W_total[h_sub:, w_sub:] = HH
-
-    W_row = np.zeros_like(W_total, dtype=np.float64)
-    for j in range(w):
-        L = W_total[:h_sub, j]
-        H = W_total[h_sub:, j]
-        W_row[0::2, j] = (L + H) / np.sqrt(2.0)
-        W_row[1::2, j] = (L - H) / np.sqrt(2.0)
-
-    img_rec = np.zeros_like(W_row, dtype=np.float64)
-    for i in range(h):
-        L = W_row[i, :w_sub]
-        H = W_row[i, w_sub:]
-        img_rec[i, 0::2] = (L + H) / np.sqrt(2.0)
-        img_rec[i, 1::2] = (L - H) / np.sqrt(2.0)
-
-    return np.clip(img_rec, 0, 255)
-
-def soft_threshold(data, threshold):
-    return np.sign(data) * np.maximum(np.abs(data) - threshold, 0)
-
-# ==========================================
-# 2. FUNGSI SVD
-# ==========================================
-
-def apply_svd_matrix(matrix, k):
-    img_data = matrix.astype(np.float64)
-    U, S, Vt = svd(img_data, full_matrices=False)
-    k = min(k, len(S))
-    S_filtered = S.copy()
-    S_filtered[k:] = 0.0
-    denoised_matrix = np.dot(U, np.dot(np.diag(S_filtered), Vt))
-    
-    # Kalkulasi Energy Retained
-    energy_retained = (np.sum(S[:k]**2) / np.sum(S**2)) * 100 if np.sum(S**2) > 0 else 0.0
-    return denoised_matrix, energy_retained
-
-# ==========================================
-# 3. METRIK EVALUASI
-# ==========================================
-
-def calculate_all_metrics(original, processed):
-    orig = original.astype(np.float64)
-    proc = processed.astype(np.float64)
-    mse = np.mean((orig - proc) ** 2)
-    
-    if mse == 0:
-        return 0.0, float('inf'), float('inf')
-        
-    rmse = np.sqrt(mse)
-    psnr = 20 * np.log10(255.0 / rmse)
-    
-    signal_power = np.mean(orig ** 2)
-    snr = 10 * np.log10(signal_power / mse)
-    
-    return rmse, psnr, snr
+import styles
+from utils import (
+    add_gaussian_noise,
+    apply_svd_matrix,
+    calculate_all_metrics,
+    ensure_even_dimensions,
+    haar_dwt_2d,
+    haar_idwt_2d,
+    soft_threshold,
+)
 
 # ==========================================
 # 4. ANTARMUKA STREAMLIT UI
 # ==========================================
 
 st.set_page_config(page_title="WT-SVD Denoising Evaluator", layout="wide")
+styles.inject_styles()
+styles.render_header()
+
 st.title("🩺 Evaluasi Metode Denoising Citra Medis")
 
 uploaded_file = st.file_uploader(
@@ -115,9 +31,7 @@ uploaded_file = st.file_uploader(
 if uploaded_file is not None:
     file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
     original_img = cv2.imdecode(file_bytes, cv2.IMREAD_GRAYSCALE)
-    
-    h, w = original_img.shape
-    original_img = original_img[:h - (h % 2), :w - (w % 2)]
+    original_img = ensure_even_dimensions(original_img)
     h, w = original_img.shape
 
     # --- TAHAP 1: PEMUATAN CITRA DAN PROPERTI ---
@@ -157,12 +71,7 @@ if uploaded_file is not None:
                 value=0.05
             )
             
-            sigma = np.sqrt(noise_var) * 255
-            np.random.seed(42)
-            noisy_img = np.clip(
-                original_img.astype(np.float64) + np.random.normal(0, sigma, original_img.shape),
-                0, 255
-            ).astype(np.uint8)
+            noisy_img, sigma = add_gaussian_noise(original_img, noise_var)
 
             rmse_n, psnr_n, snr_n = calculate_all_metrics(original_img, noisy_img)
             
@@ -235,10 +144,22 @@ if uploaded_file is not None:
             LL_komb, HL_komb, LH_komb, HH_komb = haar_dwt_2d(noisy_img)
             max_k_komb = min(LL_komb.shape)
             
+            thresh_multiplier_komb = st.slider(
+                "Multiplier Threshold WT pada Kombinasi",
+                0.1,
+                5.0,
+                1.0,
+                step=0.1,
+                help="Atur kekuatan thresholding wavelet pada sub-band detail HL/LH/HH sebelum rekonstruksi."
+            )
             k_wtsvd = st.slider("Jumlah Rank (k) Sub-band LL", 1, max_k_komb, int(max_k_komb * 0.40))
             
             LL_denoised, energy_wtsvd = apply_svd_matrix(LL_komb, k_wtsvd)
-            img_wtsvd = haar_idwt_2d(LL_denoised, HL_komb, LH_komb, HH_komb).astype(np.uint8)
+            threshold_komb = sigma * np.sqrt(2 * np.log(h * w)) * thresh_multiplier_komb
+            HL_komb_t = soft_threshold(HL_komb, threshold_komb)
+            LH_komb_t = soft_threshold(LH_komb, threshold_komb)
+            HH_komb_t = soft_threshold(HH_komb, threshold_komb)
+            img_wtsvd = haar_idwt_2d(LL_denoised, HL_komb_t, LH_komb_t, HH_komb_t).astype(np.uint8)
             
             rmse_wtsvd, psnr_wtsvd, snr_wtsvd = calculate_all_metrics(original_img, img_wtsvd)
             

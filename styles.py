@@ -1,3 +1,5 @@
+import streamlit as st
+
 CUSTOM_CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cabinet+Grotesk:wght@700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
@@ -417,3 +419,10 @@ def get_direct_zoom_html(img_orig_b64, img_mod_b64, k):
       }});
     </script>
     """
+
+def inject_styles():
+    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
+def render_header():
+    st.markdown(get_header_html(), unsafe_allow_html=True)
+
