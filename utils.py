@@ -45,7 +45,6 @@ def haar_dwt_2d(img: np.ndarray):
     return LL, cH, cV, cD
 
 
-@st.cache_data(show_spinner=False)
 def haar_idwt_2d(LL: np.ndarray, HL: np.ndarray, LH: np.ndarray, HH: np.ndarray):
     s2 = np.sqrt(2.0)
 
