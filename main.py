@@ -35,193 +35,226 @@ def image_to_data_uri(img: np.ndarray) -> str:
     return f"data:image/png;base64,{data}"
 
 
-def make_metrics_table(original, noisy, img_wt, img_svd, img_wtsvd, energy_svd, energy_wtsvd):
-    rmse_n, psnr_n, snr_n = calculate_all_metrics(original, noisy)
-    rmse_wt, psnr_wt, snr_wt = calculate_all_metrics(original, img_wt)
-    rmse_svd, psnr_svd, snr_svd = calculate_all_metrics(original, img_svd)
-    rmse_wtsvd, psnr_wtsvd, snr_wtsvd = calculate_all_metrics(original, img_wtsvd)
-
-    return [
-        {
-            "label": "RMSE",
-            "original": f"{rmse_n:.4f}",
-            "wt": f"{rmse_wt:.4f}",
-            "svd": f"{rmse_svd:.4f}",
-            "wtsvd": f"{rmse_wtsvd:.4f}",
-        },
-        {
-            "label": "PSNR (dB)",
-            "original": f"{psnr_n:.4f}",
-            "wt": f"{psnr_wt:.4f}",
-            "svd": f"{psnr_svd:.4f}",
-            "wtsvd": f"{psnr_wtsvd:.4f}",
-        },
-        {
-            "label": "SNR (dB)",
-            "original": f"{snr_n:.4f}",
-            "wt": f"{snr_wt:.4f}",
-            "svd": f"{snr_svd:.4f}",
-            "wtsvd": f"{snr_wtsvd:.4f}",
-        },
-        {
-            "label": "Energy Retained (%)",
-            "original": "-",
-            "wt": "-",
-            "svd": f"{energy_svd:.2f}",
-            "wtsvd": f"{energy_wtsvd:.2f}",
-        },
-    ]
-
-
-def process_image(file_bytes, noise_var, wt_multiplier, k_svd, k_wtsvd):
+def _read_uploaded_image(file_bytes=None):
     if file_bytes is None:
-        original = generate_synthetic_mri()
-        file_size = 0
-    else:
-        try:
-            pil = Image.open(io.BytesIO(file_bytes)).convert("L")
-            original = np.array(pil)
-            file_size = len(file_bytes)
-        except Exception:
-            original = generate_synthetic_mri()
-            file_size = 0
-
-    original = ensure_even_dimensions(original)
-    h, w = original.shape
-    max_k_svd = min(h, w)
-
-    noisy_img, sigma = add_gaussian_noise(original, noise_var)
-    rmse_n, psnr_n, snr_n = calculate_all_metrics(original, noisy_img)
-
-    LL, HL, LH, HH = haar_dwt_2d(noisy_img)
-    max_k_wtsvd = min(LL.shape)
-
-    k_svd = max(1, min(k_svd, max_k_svd))
-    k_wtsvd = max(1, min(k_wtsvd, max_k_wtsvd))
-
-    threshold = sigma * math.sqrt(2 * math.log(original.size)) * wt_multiplier
-    HL_t = soft_threshold(HL, threshold)
-    LH_t = soft_threshold(LH, threshold)
-    HH_t = soft_threshold(HH, threshold)
-    img_wt = haar_idwt_2d(LL, HL_t, LH_t, HH_t).astype(np.uint8)
-
-    img_svd_float, energy_svd = apply_svd_matrix(noisy_img, k_svd)
-    img_svd = np.clip(img_svd_float, 0, 255).astype(np.uint8)
-
-    LL_denoised, energy_wtsvd = apply_svd_matrix(LL, k_wtsvd)
-    img_wtsvd = haar_idwt_2d(LL_denoised, HL_t, LH_t, HH_t).astype(np.uint8)
-
-    rmse_wt, psnr_wt, snr_wt = calculate_all_metrics(original, img_wt)
-    rmse_svd, psnr_svd, snr_svd = calculate_all_metrics(original, img_svd)
-    rmse_wtsvd, psnr_wtsvd, snr_wtsvd = calculate_all_metrics(original, img_wtsvd)
-
-    return {
-        "original": original,
-        "noisy": noisy_img,
-        "img_wt": img_wt,
-        "img_svd": img_svd,
-        "img_wtsvd": img_wtsvd,
-        "sigma": sigma,
-        "energy_svd": energy_svd,
-        "energy_wtsvd": energy_wtsvd,
-        "original_props": {
-            "resolution": f"{w} x {h} px",
-            "aspect_ratio": f"{w/h:.2f}:1",
-            "file_size": f"{file_size/1024:.2f} KB",
-            "total_pixels": f"{original.size:,}",
-            "min_pixel": int(np.min(original)),
-            "max_pixel": int(np.max(original)),
-            "mean_pixel": f"{np.mean(original):.2f}",
-        },
-        "noise_metrics": {
-            "rmse": f"{rmse_n:.2f}",
-            "psnr": f"{psnr_n:.2f}",
-            "snr": f"{snr_n:.2f}",
-        },
-        "wt_metrics": {
-            "rmse": f"{rmse_wt:.4f}",
-            "psnr": f"{psnr_wt:.4f}",
-            "snr": f"{snr_wt:.4f}",
-        },
-        "svd_metrics": {
-            "rmse": f"{rmse_svd:.4f}",
-            "psnr": f"{psnr_svd:.4f}",
-            "snr": f"{snr_svd:.4f}",
-        },
-        "wtsvd_metrics": {
-            "rmse": f"{rmse_wtsvd:.4f}",
-            "psnr": f"{psnr_wtsvd:.4f}",
-            "snr": f"{snr_wtsvd:.4f}",
-        },
-        "max_k_svd": max_k_svd,
-        "max_k_wtsvd": max_k_wtsvd,
-        "noise_var": noise_var,
-    }
-
-
-@app.route("/", methods=["GET", "POST"])
-def index():
-    result = None
-    form_data = {
-        "noise_var": DEFAULTS["noise_var"],
-        "wt_multiplier": DEFAULTS["wt_multiplier"],
-        "k_svd": DEFAULTS["k_svd"],
-        "k_wtsvd": DEFAULTS["k_wtsvd"],
-    }
-
-    if request.method == "POST":
-        try:
-            form_data["noise_var"] = float(request.form.get("noise_var", DEFAULTS["noise_var"]))
-        except ValueError:
-            form_data["noise_var"] = DEFAULTS["noise_var"]
-
-        try:
-            form_data["wt_multiplier"] = float(request.form.get("wt_multiplier", DEFAULTS["wt_multiplier"]))
-        except ValueError:
-            form_data["wt_multiplier"] = DEFAULTS["wt_multiplier"]
-
-        try:
-            form_data["k_svd"] = int(request.form.get("k_svd", DEFAULTS["k_svd"]))
-        except ValueError:
-            form_data["k_svd"] = DEFAULTS["k_svd"]
-
-        try:
-            form_data["k_wtsvd"] = int(request.form.get("k_wtsvd", DEFAULTS["k_wtsvd"]))
-        except ValueError:
-            form_data["k_wtsvd"] = DEFAULTS["k_wtsvd"]
-
         upload_file = request.files.get("image")
-        file_bytes = upload_file.read() if upload_file and upload_file.filename else None
+        if upload_file and upload_file.filename:
+            file_bytes = upload_file.read()
+        else:
+            return generate_synthetic_mri(), None
 
-        result = process_image(
-            file_bytes,
-            form_data["noise_var"],
-            form_data["wt_multiplier"],
-            form_data["k_svd"],
-            form_data["k_wtsvd"],
-        )
+    try:
+        pil = Image.open(io.BytesIO(file_bytes)).convert("L")
+    except Exception:
+        return None, "Format file tidak valid"
 
-        result["original_data"] = image_to_data_uri(result["original"])
-        result["noisy_data"] = image_to_data_uri(result["noisy"])
-        result["wt_data"] = image_to_data_uri(result["img_wt"])
-        result["svd_data"] = image_to_data_uri(result["img_svd"])
-        result["wtsvd_data"] = image_to_data_uri(result["img_wtsvd"])
-        result["metrics_table"] = make_metrics_table(
-            result["original"],
-            result["noisy"],
-            result["img_wt"],
-            result["img_svd"],
-            result["img_wtsvd"],
-            result["energy_svd"],
-            result["energy_wtsvd"],
-        )
+    image = ensure_even_dimensions(np.array(pil))
+    if image.size == 0 or image.shape[0] == 0 or image.shape[1] == 0:
+        return None, "Gambar tidak valid atau kosong"
 
-    return render_template(
-        "index.html",
-        result=result,
-        form_data=form_data,
-        noise_options=NOISE_OPTIONS,
-    )
+    return image, None
+
+
+def _serialize_image_png(img: np.ndarray) -> str:
+    return image_to_data_uri(img)
+
+
+def _make_image_props(original: np.ndarray, file_size: int):
+    h, w = original.shape
+    return {
+        "resolution": f"{w} x {h} px",
+        "aspect_ratio": f"{w/h:.2f}:1",
+        "file_size": f"{file_size/1024:.2f} KB",
+        "total_pixels": f"{original.size:,}",
+        "min_pixel": int(np.min(original)),
+        "max_pixel": int(np.max(original)),
+        "mean_pixel": f"{np.mean(original):.2f}",
+    }
+
+
+def _compute_method(original: np.ndarray, method: str, noise_var: float, wt_multiplier: float, k_svd: int, k_wtsvd: int):
+    noisy_img, sigma = add_gaussian_noise(original, noise_var)
+
+    if method == "noise":
+        rmse_n, psnr_n, snr_n = calculate_all_metrics(original, noisy_img)
+        return {
+            "result_data": _serialize_image_png(noisy_img),
+            "title": "Citra Rusak",
+            "metrics": {
+                "rmse": f"{rmse_n:.2f}",
+                "psnr": f"{psnr_n:.2f}",
+                "snr": f"{snr_n:.2f}",
+            },
+            "params": {
+                "noise_var": noise_var,
+                "sigma": f"{sigma:.2f}",
+            },
+        }
+
+    if method == "wt":
+        LL, HL, LH, HH = haar_dwt_2d(noisy_img)
+        threshold = sigma * math.sqrt(2 * math.log(original.size)) * wt_multiplier
+        HL_t = soft_threshold(HL, threshold)
+        LH_t = soft_threshold(LH, threshold)
+        HH_t = soft_threshold(HH, threshold)
+        result_img = haar_idwt_2d(LL, HL_t, LH_t, HH_t).astype(np.uint8)
+        rmse, psnr, snr = calculate_all_metrics(original, result_img)
+        return {
+            "result_data": _serialize_image_png(result_img),
+            "title": "WT Murni",
+            "metrics": {
+                "rmse": f"{rmse:.4f}",
+                "psnr": f"{psnr:.4f}",
+                "snr": f"{snr:.4f}",
+            },
+            "params": {
+                "noise_var": noise_var,
+                "wt_multiplier": wt_multiplier,
+                "threshold": f"{threshold:.4f}",
+            },
+        }
+
+    if method == "svd":
+        img_svd_float, energy_svd = apply_svd_matrix(noisy_img, k_svd)
+        result_img = np.clip(np.rint(img_svd_float), 0, 255).astype(np.uint8)
+        rmse, psnr, snr = calculate_all_metrics(original, result_img)
+        return {
+            "result_data": _serialize_image_png(result_img),
+            "title": "SVD Murni",
+            "metrics": {
+                "rmse": f"{rmse:.4f}",
+                "psnr": f"{psnr:.4f}",
+                "snr": f"{snr:.4f}",
+            },
+            "params": {
+                "noise_var": noise_var,
+                "k_svd": k_svd,
+                "energy_retained": f"{energy_svd:.2f}%",
+            },
+        }
+
+    if method == "wtsvd":
+        LL, HL, LH, HH = haar_dwt_2d(noisy_img)
+        LL_denoised, energy_wtsvd = apply_svd_matrix(LL, k_wtsvd)
+        threshold = sigma * math.sqrt(2 * math.log(original.size)) * wt_multiplier
+        HL_t = soft_threshold(HL, threshold)
+        LH_t = soft_threshold(LH, threshold)
+        HH_t = soft_threshold(HH, threshold)
+        result_img = haar_idwt_2d(LL_denoised, HL_t, LH_t, HH_t).astype(np.uint8)
+        rmse, psnr, snr = calculate_all_metrics(original, result_img)
+        return {
+            "result_data": _serialize_image_png(result_img),
+            "title": "WT-SVD",
+            "metrics": {
+                "rmse": f"{rmse:.4f}",
+                "psnr": f"{psnr:.4f}",
+                "snr": f"{snr:.4f}",
+            },
+            "params": {
+                "noise_var": noise_var,
+                "wt_multiplier": wt_multiplier,
+                "k_wtsvd": k_wtsvd,
+                "energy_retained": f"{energy_wtsvd:.2f}%",
+            },
+        }
+
+    return None
+
+
+def _prepare_response(original, image_data, props=None, metrics=None, title=None, params=None):
+    response = {
+        "original_data": _serialize_image_png(original),
+        "original_props": props or {},
+    }
+    if image_data:
+        response.update({
+            "result_data": image_data,
+            "title": title,
+            "metrics": metrics or {},
+            "params": params or {},
+        })
+    return response
+
+
+@app.route("/", methods=["GET"])
+def index():
+    return render_template("index.html")
+
+
+@app.route("/upload", methods=["POST"])
+def upload_image():
+    upload_file = request.files.get("image")
+    if not upload_file or not upload_file.filename:
+        return {"error": "Tidak ada file yang diunggah"}, 400
+
+    file_bytes = upload_file.read()
+    original, error = _read_uploaded_image(file_bytes)
+    if error:
+        return {"error": error}, 400
+
+    props = _make_image_props(original, len(file_bytes))
+    return {
+        "original_data": _serialize_image_png(original),
+        "original_props": props,
+    }
+
+
+@app.route("/process_noise", methods=["POST"])
+def process_noise():
+    upload_file = request.files.get("image")
+    if not upload_file or not upload_file.filename:
+        return {"error": "Tidak ada file yang diunggah"}, 400
+
+    file_bytes = upload_file.read()
+    original, error = _read_uploaded_image(file_bytes)
+    if error:
+        return {"error": error}, 400
+
+    try:
+        noise_var = float(request.form.get("noise_var", DEFAULTS["noise_var"]))
+    except ValueError:
+        noise_var = DEFAULTS["noise_var"]
+
+    result = _compute_method(original, "noise", noise_var, 1.0, 1, 1)
+    return result
+
+
+@app.route("/process_method", methods=["POST"])
+def process_method():
+    upload_file = request.files.get("image")
+    if not upload_file or not upload_file.filename:
+        return {"error": "Tidak ada file yang diunggah"}, 400
+
+    file_bytes = upload_file.read()
+    original, error = _read_uploaded_image(file_bytes)
+    if error:
+        return {"error": error}, 400
+
+    method = request.form.get("method", "wt")
+    try:
+        noise_var = float(request.form.get("noise_var", DEFAULTS["noise_var"]))
+    except ValueError:
+        noise_var = DEFAULTS["noise_var"]
+
+    try:
+        wt_multiplier = float(request.form.get("wt_multiplier", DEFAULTS["wt_multiplier"]))
+    except ValueError:
+        wt_multiplier = DEFAULTS["wt_multiplier"]
+
+    try:
+        k_svd = int(request.form.get("k_svd", DEFAULTS["k_svd"]))
+    except ValueError:
+        k_svd = DEFAULTS["k_svd"]
+
+    try:
+        k_wtsvd = int(request.form.get("k_wtsvd", DEFAULTS["k_wtsvd"]))
+    except ValueError:
+        k_wtsvd = DEFAULTS["k_wtsvd"]
+
+    result = _compute_method(original, method, noise_var, wt_multiplier, k_svd, k_wtsvd)
+    if result is None:
+        return {"error": "Metode tidak dikenali"}, 400
+    return result
 
 
 if __name__ == "__main__":

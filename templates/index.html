@@ -23,121 +23,66 @@
         <h2 class="section-title">1. Citra Asli & Properti</h2>
         <div class="grid-2">
           <div class="card">
-            <form id="main-form" method="post" enctype="multipart/form-data">
-              <div class="field-group">
-                <label for="image">Unggah Citra Medis (PNG / JPG / BMP)</label>
-                <div class="file-uploader">
-                  <input type="file" id="image" name="image" accept="image/png, image/jpeg, image/bmp" />
-                  <p class="note">Biarkan kosong untuk menggunakan citra contoh sintetis.</p>
-                </div>
-                <img id="preview-img" class="preview" src="" alt="Preview" style="display:none; margin-top: 1rem;" />
+            <div class="field-group">
+              <label for="image">Unggah Citra Medis (PNG / JPG / BMP)</label>
+              <div class="file-uploader">
+                <input type="file" id="image" name="image" accept="image/png, image/jpeg, image/bmp" />
+                <p class="note">Biarkan kosong untuk menggunakan citra contoh sintetis.</p>
               </div>
+              <img id="preview-img" class="preview" src="" alt="Preview" style="display:none; margin-top: 1rem;" />
+            </div>
 
-              <div class="field-row">
-                <label for="noise_var">Varians Noise (σ²)</label>
-                <select id="noise_var" name="noise_var">
-                  {% for value in noise_options %}
-                  <option value="{{ value }}" {% if form_data.noise_var == value %}selected{% endif %}>{{ value }}</option>
-                  {% endfor %}
-                </select>
-              </div>
-
-              <div class="field-row">
-                <label for="wt_multiplier">Multiplier Threshold WT</label>
-                <input type="number" id="wt_multiplier" name="wt_multiplier" min="0.1" max="5.0" step="0.1" value="{{ form_data.wt_multiplier }}" />
-              </div>
-
-              <div class="field-row">
-                <label for="k_svd">Rank k untuk SVD Murni</label>
-                <input type="number" id="k_svd" name="k_svd" min="1" max="{{ result.max_k_svd if result else 256 }}" value="{{ form_data.k_svd }}" />
-              </div>
-
-              <div class="field-row">
-                <label for="k_wtsvd">Rank k untuk LL pada WT-SVD</label>
-                <input type="number" id="k_wtsvd" name="k_wtsvd" min="1" max="{{ result.max_k_wtsvd if result else 256 }}" value="{{ form_data.k_wtsvd }}" />
-              </div>
-
-              <button type="submit" class="button">Proses Sekarang</button>
-            </form>
+            <button id="btn-upload" class="button">Unggah & Tampilkan Properti</button>
           </div>
 
           <div class="card">
             <h3>Properti Gambar</h3>
-            {% if result %}
-            <div class="image-card">
-              <strong>Citra Asli</strong>
-              <img src="{{ result.original_data }}" class="preview" alt="Citra Asli" />
+            <div id="props-container" class="props-container">
+              <p class="note">Unggah gambar untuk menampilkan properti citra secara langsung.</p>
             </div>
-            <div class="metric-grid">
-              <div class="metric-card">
-                <strong>Resolusi Spasial</strong>
-                <span>{{ result.original_props.resolution }}</span>
-              </div>
-              <div class="metric-card">
-                <strong>Aspek Rasio</strong>
-                <span>{{ result.original_props.aspect_ratio }}</span>
-              </div>
-              <div class="metric-card">
-                <strong>Ukuran File</strong>
-                <span>{{ result.original_props.file_size }}</span>
-              </div>
-              <div class="metric-card">
-                <strong>Total Piksel</strong>
-                <span>{{ result.original_props.total_pixels }}</span>
-              </div>
-              <div class="metric-card">
-                <strong>Piksel Terendah</strong>
-                <span>{{ result.original_props.min_pixel }}</span>
-              </div>
-              <div class="metric-card">
-                <strong>Piksel Tertinggi</strong>
-                <span>{{ result.original_props.max_pixel }}</span>
-              </div>
-              <div class="metric-card" style="grid-column: span 2;">
-                <strong>Intensitas Rata-rata</strong>
-                <span>{{ result.original_props.mean_pixel }}</span>
-              </div>
-            </div>
-            {% else %}
-            <p class="note">Setelah mengunggah citra dan menekan Proses Sekarang, properti gambar akan muncul di sini.</p>
-            {% endif %}
           </div>
         </div>
       </section>
 
-      {% if result %}
-      <section class="block">
+      <section class="block" id="noise-section" style="display:none;">
         <h2 class="section-title">2. Pemodelan Noise Gaussian</h2>
         <div class="grid-2">
           <div class="card">
             <h3>Citra Rusak</h3>
-            <img src="{{ result.noisy_data }}" class="preview" alt="Noisy image" />
+            <div class="placeholder-text" id="noise-placeholder">Silakan tekan tombol "Proses Noise Gaussian" untuk menampilkan citra noisy.</div>
+            <img id="noisy-preview" class="preview hidden" src="" alt="Noisy image" />
           </div>
           <div class="card">
-            <h3>Metrik Degradasi Awal</h3>
-            <div class="metric-grid">
+            <h3>Pengaturan Noise Gaussian</h3>
+            <div class="field-row">
+              <label for="noise_var">Varians Noise (σ²)</label>
+              <input type="number" id="noise_var" name="noise_var" min="0" max="3.0" step="0.01" value="0.05" />
+            </div>
+            <button class="button" id="btn-process-noise">Proses Noise Gaussian</button>
+            <h3 style="margin-top: 1.5rem;">Metrik Degradasi Awal</h3>
+            <div class="metric-grid" style="margin-top: 1rem;">
               <div class="metric-card">
                 <strong>RMSE</strong>
-                <span>{{ result.noise_metrics.rmse }}</span>
+                <span id="noise-rmse">-</span>
               </div>
               <div class="metric-card">
                 <strong>PSNR</strong>
-                <span>{{ result.noise_metrics.psnr }} dB</span>
+                <span id="noise-psnr">-</span>
               </div>
               <div class="metric-card">
                 <strong>SNR</strong>
-                <span>{{ result.noise_metrics.snr }} dB</span>
+                <span id="noise-snr">-</span>
               </div>
               <div class="metric-card" style="grid-column: span 2;">
                 <strong>Varians Noise</strong>
-                <span>{{ form_data.noise_var }}</span>
+                <span id="noise-variance">-</span>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <section class="block">
+      <section class="block" id="processing-section" style="display:none;">
         <h2 class="section-title">3. Pemrosesan Denoising</h2>
         <div class="tabs-wrapper">
           <div class="tabs">
@@ -147,33 +92,50 @@
           </div>
 
           <div class="tab-note">
-            Pilih tab untuk melihat preview dan metrik dari setiap metode denoising.
+            Konfigurasi setiap metode diproses secara terpisah di tab masing-masing.
           </div>
+
+          <div id="processing-status" class="processing-status hidden">Siap memproses. Pilih metode dan tekan tombol.</div>
 
           <div class="tab-content active" id="tab-wt">
             <div class="grid-2">
               <div class="card">
                 <h3>Hasil WT Murni</h3>
-                <img src="{{ result.wt_data }}" class="preview" alt="WT result" />
+                <div class="placeholder-text" id="wt-placeholder">Silakan tekan tombol "Proses WT" untuk menampilkan hasil.</div>
+                <img id="wt-preview" class="preview hidden" src="" alt="WT result" />
               </div>
               <div class="card">
+                <h3>Konfigurasi WT</h3>
+                <div class="field-row">
+                  <label for="wt_multiplier">Multiplier Threshold WT</label>
+                  <input type="number" id="wt_multiplier" name="wt_multiplier" min="0.1" max="5.0" step="0.1" value="1.0" />
+                </div>
+                <div class="metric-grid">
+                  <div class="metric-card">
+                    <strong>Threshold Multiplier</strong>
+                    <span id="wt-multiplier-display">1.0</span>
+                  </div>
+                  <div class="metric-card" style="grid-column: span 2;">
+                    <button class="button" id="btn-process-wt">Proses WT</button>
+                  </div>
+                </div>
                 <h3>Metrik WT Murni</h3>
                 <div class="metric-grid">
                   <div class="metric-card">
                     <strong>RMSE</strong>
-                    <span>{{ result.wt_metrics.rmse }}</span>
+                    <span id="wt-rmse">-</span>
                   </div>
                   <div class="metric-card">
                     <strong>PSNR</strong>
-                    <span>{{ result.wt_metrics.psnr }} dB</span>
+                    <span id="wt-psnr">-</span>
                   </div>
                   <div class="metric-card">
                     <strong>SNR</strong>
-                    <span>{{ result.wt_metrics.snr }} dB</span>
+                    <span id="wt-snr">-</span>
                   </div>
                   <div class="metric-card" style="grid-column: span 2;">
-                    <strong>Threshold Multiplier</strong>
-                    <span>{{ form_data.wt_multiplier }}</span>
+                    <strong>Energy Retained</strong>
+                    <span id="wt-energy">-</span>
                   </div>
                 </div>
               </div>
@@ -184,26 +146,41 @@
             <div class="grid-2">
               <div class="card">
                 <h3>Hasil SVD Murni</h3>
-                <img src="{{ result.svd_data }}" class="preview" alt="SVD result" />
+                <div class="placeholder-text" id="svd-placeholder">Silakan tekan tombol "Proses SVD" untuk menampilkan hasil.</div>
+                <img id="svd-preview" class="preview hidden" src="" alt="SVD result" />
               </div>
               <div class="card">
+                <h3>Konfigurasi SVD</h3>
+                <div class="field-row">
+                  <label for="k_svd">Rank k untuk SVD Murni</label>
+                  <input type="number" id="k_svd" name="k_svd" min="1" max="256" value="50" />
+                </div>
+                <div class="metric-grid">
+                  <div class="metric-card">
+                    <strong>Rank SVD</strong>
+                    <span id="svd-rank-display">50</span>
+                  </div>
+                  <div class="metric-card" style="grid-column: span 2;">
+                    <button class="button" id="btn-process-svd">Proses SVD</button>
+                  </div>
+                </div>
                 <h3>Metrik SVD Murni</h3>
                 <div class="metric-grid">
                   <div class="metric-card">
                     <strong>RMSE</strong>
-                    <span>{{ result.svd_metrics.rmse }}</span>
+                    <span id="svd-rmse">-</span>
                   </div>
                   <div class="metric-card">
                     <strong>PSNR</strong>
-                    <span>{{ result.svd_metrics.psnr }} dB</span>
+                    <span id="svd-psnr">-</span>
                   </div>
                   <div class="metric-card">
                     <strong>SNR</strong>
-                    <span>{{ result.svd_metrics.snr }} dB</span>
+                    <span id="svd-snr">-</span>
                   </div>
                   <div class="metric-card" style="grid-column: span 2;">
-                    <strong>Rank SVD</strong>
-                    <span>{{ form_data.k_svd }}</span>
+                    <strong>Energy Retained</strong>
+                    <span id="svd-energy">-</span>
                   </div>
                 </div>
               </div>
@@ -214,26 +191,49 @@
             <div class="grid-2">
               <div class="card">
                 <h3>Hasil Kombinasi WT-SVD</h3>
-                <img src="{{ result.wtsvd_data }}" class="preview" alt="WT-SVD result" />
+                <div class="placeholder-text" id="wtsvd-placeholder">Silakan tekan tombol "Proses WT-SVD" untuk menampilkan hasil.</div>
+                <img id="wtsvd-preview" class="preview hidden" src="" alt="WT-SVD result" />
               </div>
               <div class="card">
+                <h3>Konfigurasi WT-SVD</h3>
+                <div class="field-row">
+                  <label for="k_wtsvd">Rank k untuk LL pada WT-SVD</label>
+                  <input type="number" id="k_wtsvd" name="k_wtsvd" min="1" max="256" value="50" />
+                </div>
+                <div class="field-row">
+                  <label for="wt_multiplier_wtsvd">Multiplier Threshold WT</label>
+                  <input type="number" id="wt_multiplier_wtsvd" name="wt_multiplier_wtsvd" min="0.1" max="5.0" step="0.1" value="1.0" />
+                </div>
+                <div class="metric-grid">
+                  <div class="metric-card">
+                    <strong>Rank WT-SVD</strong>
+                    <span id="wtsvd-rank-display">50</span>
+                  </div>
+                  <div class="metric-card">
+                    <strong>Threshold Multiplier</strong>
+                    <span id="wtsvd-multiplier-display">1.0</span>
+                  </div>
+                  <div class="metric-card" style="grid-column: span 2;">
+                    <button class="button" id="btn-process-wtsvd">Proses WT-SVD</button>
+                  </div>
+                </div>
                 <h3>Metrik WT-SVD</h3>
                 <div class="metric-grid">
                   <div class="metric-card">
                     <strong>RMSE</strong>
-                    <span>{{ result.wtsvd_metrics.rmse }}</span>
+                    <span id="wtsvd-rmse">-</span>
                   </div>
                   <div class="metric-card">
                     <strong>PSNR</strong>
-                    <span>{{ result.wtsvd_metrics.psnr }} dB</span>
+                    <span id="wtsvd-psnr">-</span>
                   </div>
                   <div class="metric-card">
                     <strong>SNR</strong>
-                    <span>{{ result.wtsvd_metrics.snr }} dB</span>
+                    <span id="wtsvd-snr">-</span>
                   </div>
                   <div class="metric-card" style="grid-column: span 2;">
-                    <strong>Rank LL WT-SVD</strong>
-                    <span>{{ form_data.k_wtsvd }}</span>
+                    <strong>Energy Retained</strong>
+                    <span id="wtsvd-energy">-</span>
                   </div>
                 </div>
               </div>
@@ -242,7 +242,7 @@
         </div>
       </section>
 
-      <section class="block">
+      <section class="block" id="comparison-section" style="display:none;">
         <div class="card">
           <h2 class="section-title">4. Tabel Komparasi Metrik Evaluasi Akhir</h2>
           <div class="table-wrapper">
@@ -256,77 +256,278 @@
                   <th>WT-SVD</th>
                 </tr>
               </thead>
-              <tbody>
-                {% for row in result.metrics_table %}
-                <tr>
-                  <td>{{ row.label }}</td>
-                  <td>{{ row.original }}</td>
-                  <td>{{ row.wt }}</td>
-                  <td>{{ row.svd }}</td>
-                  <td>{{ row.wtsvd }}</td>
-                </tr>
-                {% endfor %}
+              <tbody id="comparison-body">
               </tbody>
             </table>
           </div>
         </div>
       </section>
-      {% endif %}
+    </div>
+
+    <div id="loading-overlay" class="loading-overlay hidden">
+      <div class="loading-card">
+        <div class="spinner"></div>
+        <div id="loading-message">Sedang memproses...</div>
+      </div>
     </div>
   </main>
 
   <script>
     const input = document.getElementById('image');
     const preview = document.getElementById('preview-img');
-    const form = document.getElementById('main-form');
+    const btnUpload = document.getElementById('btn-upload');
+    const btnProcessNoise = document.getElementById('btn-process-noise');
+    const btnProcessWt = document.getElementById('btn-process-wt');
+    const btnProcessSvd = document.getElementById('btn-process-svd');
+    const btnProcessWtsvd = document.getElementById('btn-process-wtsvd');
+    const loadingOverlay = document.getElementById('loading-overlay');
+    const loadingMessage = document.getElementById('loading-message');
+    const processingStatus = document.getElementById('processing-status');
+    const noiseSection = document.getElementById('noise-section');
+    const processingSection = document.getElementById('processing-section');
+    const comparisonSection = document.getElementById('comparison-section');
+    const propsContainer = document.getElementById('props-container');
+
+    let selectedFile = null;
+    let isLoading = false;
+
+    const actionButtons = [btnUpload, btnProcessNoise, btnProcessWt, btnProcessSvd, btnProcessWtsvd];
+
+    function setButtonsEnabled(enabled) {
+      actionButtons.forEach((button) => {
+        if (button) {
+          button.disabled = !enabled;
+          button.style.cursor = enabled ? 'pointer' : 'not-allowed';
+          button.style.opacity = enabled ? '1' : '0.65';
+        }
+      });
+    }
+
+    function setLoading(enabled, text = 'Sedang memproses...') {
+      isLoading = enabled;
+      loadingMessage.textContent = text;
+      loadingOverlay.classList.toggle('hidden', !enabled);
+      setButtonsEnabled(!enabled);
+    }
+
+    function setProcessingStatus(message, show = true) {
+      processingStatus.textContent = message;
+      processingStatus.classList.toggle('hidden', !show);
+    }
 
     input.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) { preview.style.display = 'none'; return; }
+      selectedFile = e.target.files[0] || null;
+      if (!selectedFile) {
+        preview.style.display = 'none';
+        return;
+      }
       const reader = new FileReader();
       reader.onload = function(ev) {
         preview.src = ev.target.result;
         preview.style.display = 'block';
       };
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(selectedFile);
     });
 
-    form.addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-      const file = input.files[0];
+    btnUpload.addEventListener('click', async () => {
       const fd = new FormData();
-      fd.append('noise_var', document.getElementById('noise_var').value);
-      fd.append('wt_multiplier', document.getElementById('wt_multiplier').value);
-      fd.append('k_svd', document.getElementById('k_svd').value);
-      fd.append('k_wtsvd', document.getElementById('k_wtsvd').value);
-
-      if (file) {
-        const dataUrl = await new Promise((res) => {
-          const r = new FileReader();
-          r.onload = () => res(r.result);
-          r.readAsDataURL(file);
-        });
-        const img = new Image();
-        img.src = dataUrl;
-        await new Promise((res) => img.onload = res);
-
-        const maxDim = 1024;
-        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-        const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.8));
-        fd.append('image', blob, file.name.replace(/\.[^.]+$/, '.jpg'));
+      if (selectedFile) {
+        fd.append('image', selectedFile);
       }
 
-      const resp = await fetch('/', { method: 'POST', body: fd });
-      const text = await resp.text();
-      document.open();
-      document.write(text);
-      document.close();
+      const resp = await fetch('/upload', { method: 'POST', body: fd });
+      if (!resp.ok) {
+        const error = await resp.json();
+        alert(error.error || 'Gagal mengambil properti citra');
+        return;
+      }
+
+      const data = await resp.json();
+      preview.src = data.original_data;
+      preview.style.display = 'block';
+      propsContainer.innerHTML = `
+        <div class="image-card">
+          <strong>Citra Asli</strong>
+          <img src="${data.original_data}" class="preview" alt="Citra Asli" />
+        </div>
+        <div class="metric-grid">
+          <div class="metric-card"><strong>Resolusi Spasial</strong><span>${data.original_props.resolution}</span></div>
+          <div class="metric-card"><strong>Aspek Rasio</strong><span>${data.original_props.aspect_ratio}</span></div>
+          <div class="metric-card"><strong>Ukuran File</strong><span>${data.original_props.file_size}</span></div>
+          <div class="metric-card"><strong>Total Piksel</strong><span>${data.original_props.total_pixels}</span></div>
+          <div class="metric-card"><strong>Piksel Terendah</strong><span>${data.original_props.min_pixel}</span></div>
+          <div class="metric-card"><strong>Piksel Tertinggi</strong><span>${data.original_props.max_pixel}</span></div>
+          <div class="metric-card" style="grid-column: span 2;"><strong>Intensitas Rata-rata</strong><span>${data.original_props.mean_pixel}</span></div>
+        </div>
+      `;
+
+      noiseSection.style.display = 'block';
+      processingSection.style.display = 'block';
+      comparisonSection.style.display = 'block';
+      resetPreviewPlaceholders();
+      updateThresholdDisplays();
+    });
+
+    function resetPreviewPlaceholders() {
+      document.getElementById('noise-placeholder').style.display = 'block';
+      document.getElementById('noisy-preview').classList.add('hidden');
+      document.getElementById('wt-placeholder').style.display = 'block';
+      document.getElementById('wt-preview').classList.add('hidden');
+      document.getElementById('svd-placeholder').style.display = 'block';
+      document.getElementById('svd-preview').classList.add('hidden');
+      document.getElementById('wtsvd-placeholder').style.display = 'block';
+      document.getElementById('wtsvd-preview').classList.add('hidden');
+      document.getElementById('wt-energy').textContent = '-';
+      document.getElementById('svd-energy').textContent = '-';
+      document.getElementById('wtsvd-energy').textContent = '-';
+    }
+
+    async function processNoise() {
+      const fd = new FormData();
+      if (selectedFile) {
+        fd.append('image', selectedFile);
+      }
+      fd.append('noise_var', document.getElementById('noise_var').value);
+
+      const resp = await fetch('/process_noise', { method: 'POST', body: fd });
+      if (!resp.ok) {
+        const error = await resp.json();
+        alert(error.error || 'Gagal memproses noise');
+        return null;
+      }
+      return resp.json();
+    }
+
+    async function processMethod(method) {
+      const fd = new FormData();
+      if (selectedFile) {
+        fd.append('image', selectedFile);
+      }
+      fd.append('method', method);
+      fd.append('noise_var', document.getElementById('noise_var').value);
+
+      if (method === 'wt') {
+        fd.append('wt_multiplier', document.getElementById('wt_multiplier').value);
+      }
+      if (method === 'svd') {
+        fd.append('k_svd', document.getElementById('k_svd').value);
+      }
+      if (method === 'wtsvd') {
+        fd.append('k_wtsvd', document.getElementById('k_wtsvd').value);
+        fd.append('wt_multiplier', document.getElementById('wt_multiplier_wtsvd').value);
+      }
+
+      const resp = await fetch('/process_method', { method: 'POST', body: fd });
+      if (!resp.ok) {
+        const error = await resp.json();
+        alert(error.error || 'Gagal memproses metode');
+        return null;
+      }
+      return resp.json();
+    }
+
+    function updateThresholdDisplays() {
+      document.getElementById('wt-multiplier-display').textContent = document.getElementById('wt_multiplier').value;
+      document.getElementById('svd-rank-display').textContent = document.getElementById('k_svd').value;
+      document.getElementById('wtsvd-rank-display').textContent = document.getElementById('k_wtsvd').value;
+      document.getElementById('wtsvd-multiplier-display').textContent = document.getElementById('wt_multiplier_wtsvd').value;
+    }
+
+    let noiseMetrics = null;
+    let wtMetrics = null;
+    let svdMetrics = null;
+    let wtsvdMetrics = null;
+
+    async function refreshNoiseMetrics() {
+      setLoading(true, 'Memproses noise Gaussian...');
+      setProcessingStatus('Memproses noise Gaussian...');
+      try {
+        const result = await processNoise();
+        if (!result) return null;
+        document.getElementById('noise-placeholder').style.display = 'none';
+        document.getElementById('noisy-preview').src = result.result_data;
+        document.getElementById('noisy-preview').classList.remove('hidden');
+        document.getElementById('noise-rmse').textContent = result.metrics.rmse;
+        document.getElementById('noise-psnr').textContent = result.metrics.psnr + ' dB';
+        document.getElementById('noise-snr').textContent = result.metrics.snr + ' dB';
+        document.getElementById('noise-variance').textContent = document.getElementById('noise_var').value;
+        noiseMetrics = result.metrics;
+        renderComparisonTable();
+        setProcessingStatus('Noise Gaussian selesai.', true);
+        return result;
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    async function onProcess(method, previewId, metricsPrefix) {
+      setLoading(true, 'Memproses ' + (method === 'wt' ? 'WT' : method === 'svd' ? 'SVD' : 'WT-SVD') + '...');
+      setProcessingStatus('Memproses ' + (method === 'wt' ? 'WT' : method === 'svd' ? 'SVD' : 'WT-SVD') + '...');
+      try {
+        const result = await processMethod(method);
+        if (!result) return;
+        const previewEl = document.getElementById(previewId);
+        const placeholderEl = document.getElementById(`${method}-placeholder`);
+        placeholderEl.style.display = 'none';
+        previewEl.src = result.result_data;
+        previewEl.classList.remove('hidden');
+        document.getElementById(`${metricsPrefix}-rmse`).textContent = result.metrics.rmse;
+        document.getElementById(`${metricsPrefix}-psnr`).textContent = result.metrics.psnr + ' dB';
+        document.getElementById(`${metricsPrefix}-snr`).textContent = result.metrics.snr + ' dB';
+        document.getElementById(`${metricsPrefix}-energy`).textContent = result.params.energy_retained || '-';
+
+        if (method === 'wt') wtMetrics = result.metrics;
+        if (method === 'svd') svdMetrics = result.metrics;
+        if (method === 'wtsvd') wtsvdMetrics = result.metrics;
+
+        renderComparisonTable();
+        setProcessingStatus((method === 'wt' ? 'WT' : method === 'svd' ? 'SVD' : 'WT-SVD') + ' selesai.', true);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function renderComparisonTable() {
+      if (!noiseMetrics) return;
+      comparisonSection.style.display = 'block';
+      const rows = [
+        { label: 'RMSE', noisy: noiseMetrics.rmse || '-', wt: wtMetrics?.rmse || '-', svd: svdMetrics?.rmse || '-', wtsvd: wtsvdMetrics?.rmse || '-' },
+        { label: 'PSNR', noisy: noiseMetrics.psnr || '-', wt: wtMetrics?.psnr || '-', svd: svdMetrics?.psnr || '-', wtsvd: wtsvdMetrics?.psnr || '-' },
+        { label: 'SNR', noisy: noiseMetrics.snr || '-', wt: wtMetrics?.snr || '-', svd: svdMetrics?.snr || '-', wtsvd: wtsvdMetrics?.snr || '-' },
+      ];
+
+      document.getElementById('comparison-body').innerHTML = rows.map((row) => `
+        <tr>
+          <td>${row.label}</td>
+          <td>${row.noisy}</td>
+          <td>${row.wt}</td>
+          <td>${row.svd}</td>
+          <td>${row.wtsvd}</td>
+        </tr>
+      `).join('');
+    }
+
+    document.getElementById('btn-process-noise').addEventListener('click', async () => {
+      await refreshNoiseMetrics();
+      updateThresholdDisplays();
+    });
+
+    document.getElementById('btn-process-wt').addEventListener('click', async () => {
+      await refreshNoiseMetrics();
+      updateThresholdDisplays();
+      await onProcess('wt', 'wt-preview', 'wt');
+    });
+
+    document.getElementById('btn-process-svd').addEventListener('click', async () => {
+      await refreshNoiseMetrics();
+      updateThresholdDisplays();
+      await onProcess('svd', 'svd-preview', 'svd');
+    });
+
+    document.getElementById('btn-process-wtsvd').addEventListener('click', async () => {
+      await refreshNoiseMetrics();
+      updateThresholdDisplays();
+      await onProcess('wtsvd', 'wtsvd-preview', 'wtsvd');
     });
 
     function attachTabs() {
