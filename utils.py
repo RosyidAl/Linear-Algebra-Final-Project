@@ -2,7 +2,6 @@ import numpy as np
 from PIL import Image
 import base64
 import io
-import pywt
 
 
 def ensure_even_dimensions(img: np.ndarray) -> np.ndarray:
@@ -26,17 +25,50 @@ def haar_dwt_2d(img: np.ndarray):
     h, w = img.shape
     if h % 2 != 0:
         img = img[:-1, :]
+        h -= 1
     if w % 2 != 0:
         img = img[:, :-1]
+        w -= 1
 
-    LL, (cH, cV, cD) = pywt.dwt2(img, 'haar', mode='periodization')
-    return LL, cV, cH, cD
+    s2 = np.sqrt(2.0)
+
+    # Row-wise transform
+    a = (img[:, 0::2] + img[:, 1::2]) / s2
+    d = (img[:, 0::2] - img[:, 1::2]) / s2
+
+    # Column-wise transform
+    LL = (a[0::2, :] + a[1::2, :]) / s2
+    cV = (a[0::2, :] - a[1::2, :]) / s2
+    cH = (d[0::2, :] + d[1::2, :]) / s2
+    cD = (d[0::2, :] - d[1::2, :]) / s2
+
+    return LL, cH, cV, cD
 
 
 @st.cache_data(show_spinner=False)
 def haar_idwt_2d(LL: np.ndarray, HL: np.ndarray, LH: np.ndarray, HH: np.ndarray):
-    reconstructed = pywt.idwt2((LL, (LH, HL, HH)), 'haar', mode='periodization')
-    return np.clip(reconstructed, 0, 255)
+    s2 = np.sqrt(2.0)
+
+    # Inverse column transform to get A_rows and D_rows
+    a0 = (LL + HL) / s2
+    a1 = (LL - HL) / s2
+    d0 = (LH + HH) / s2
+    d1 = (LH - HH) / s2
+
+    # Interleave rows
+    A_rows = np.empty((a0.shape[0] * 2, a0.shape[1]), dtype=np.float64)
+    D_rows = np.empty_like(A_rows)
+    A_rows[0::2, :] = (a0 + a1) / s2
+    A_rows[1::2, :] = (a0 - a1) / s2
+    D_rows[0::2, :] = (d0 + d1) / s2
+    D_rows[1::2, :] = (d0 - d1) / s2
+
+    # Inverse row transform to reconstruct image
+    recon = np.empty((A_rows.shape[0], A_rows.shape[1] * 2), dtype=np.float64)
+    recon[:, 0::2] = (A_rows + D_rows) / s2
+    recon[:, 1::2] = (A_rows - D_rows) / s2
+
+    return np.clip(recon, 0, 255)
 
 
 def soft_threshold(data: np.ndarray, threshold: float):
@@ -109,6 +141,11 @@ def calculate_metrics(img_true, img_pred):
     return mse, psnr
 
 def hybrid_wavelet_svd_reconstruct(A, wavelet_name, level, k):
+    try:
+        import pywt
+    except Exception:
+        raise ImportError("hybrid_wavelet_svd_reconstruct requires PyWavelets; install PyWavelets to use this function.")
+
     # 1. Dekomposisi Wavelet (DWT)
     coeffs = pywt.wavedec2(A, wavelet=wavelet_name, level=level)
     coeffs_list = list(coeffs)
