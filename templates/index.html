@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WT-SVD Denoising Evaluator</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="custom-header">
+    <div class="header-left">
+      <div class="logo-icon">WT-SVD</div>
+      <div class="brand-name">WT-SVD Denoising Evaluator</div>
+    </div>
+    <div class="header-right">
+      <div class="status-badge">Deploy Demo</div>
+    </div>
+  </div>
+
+  <main class="main">
+    <div class="block-container">
+      <section class="block">
+        <h2 class="section-title">1. Citra Asli & Properti</h2>
+        <div class="grid-2">
+          <div class="card">
+            <form id="main-form" method="post" enctype="multipart/form-data">
+              <div class="field-group">
+                <label for="image">Unggah Citra Medis (PNG / JPG / BMP)</label>
+                <div class="file-uploader">
+                  <input type="file" id="image" name="image" accept="image/png, image/jpeg, image/bmp" />
+                  <p class="note">Biarkan kosong untuk menggunakan citra contoh sintetis.</p>
+                </div>
+                <img id="preview-img" class="preview" src="" alt="Preview" style="display:none; margin-top: 1rem;" />
+              </div>
+
+              <div class="field-row">
+                <label for="noise_var">Varians Noise (σ²)</label>
+                <select id="noise_var" name="noise_var">
+                  {% for value in noise_options %}
+                  <option value="{{ value }}" {% if form_data.noise_var == value %}selected{% endif %}>{{ value }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div class="field-row">
+                <label for="wt_multiplier">Multiplier Threshold WT</label>
+                <input type="number" id="wt_multiplier" name="wt_multiplier" min="0.1" max="5.0" step="0.1" value="{{ form_data.wt_multiplier }}" />
+              </div>
+
+              <div class="field-row">
+                <label for="k_svd">Rank k untuk SVD Murni</label>
+                <input type="number" id="k_svd" name="k_svd" min="1" max="{{ result.max_k_svd if result else 256 }}" value="{{ form_data.k_svd }}" />
+              </div>
+
+              <div class="field-row">
+                <label for="k_wtsvd">Rank k untuk LL pada WT-SVD</label>
+                <input type="number" id="k_wtsvd" name="k_wtsvd" min="1" max="{{ result.max_k_wtsvd if result else 256 }}" value="{{ form_data.k_wtsvd }}" />
+              </div>
+
+              <button type="submit" class="button">Proses Sekarang</button>
+            </form>
+          </div>
+
+          <div class="card">
+            <h3>Properti Gambar</h3>
+            {% if result %}
+            <div class="image-card">
+              <strong>Citra Asli</strong>
+              <img src="{{ result.original_data }}" class="preview" alt="Citra Asli" />
+            </div>
+            <div class="metric-grid">
+              <div class="metric-card">
+                <strong>Resolusi Spasial</strong>
+                <span>{{ result.original_props.resolution }}</span>
+              </div>
+              <div class="metric-card">
+                <strong>Aspek Rasio</strong>
+                <span>{{ result.original_props.aspect_ratio }}</span>
+              </div>
+              <div class="metric-card">
+                <strong>Ukuran File</strong>
+                <span>{{ result.original_props.file_size }}</span>
+              </div>
+              <div class="metric-card">
+                <strong>Total Piksel</strong>
+                <span>{{ result.original_props.total_pixels }}</span>
+              </div>
+              <div class="metric-card">
+                <strong>Piksel Terendah</strong>
+                <span>{{ result.original_props.min_pixel }}</span>
+              </div>
+              <div class="metric-card">
+                <strong>Piksel Tertinggi</strong>
+                <span>{{ result.original_props.max_pixel }}</span>
+              </div>
+              <div class="metric-card" style="grid-column: span 2;">
+                <strong>Intensitas Rata-rata</strong>
+                <span>{{ result.original_props.mean_pixel }}</span>
+              </div>
+            </div>
+            {% else %}
+            <p class="note">Setelah mengunggah citra dan menekan Proses Sekarang, properti gambar akan muncul di sini.</p>
+            {% endif %}
+          </div>
+        </div>
+      </section>
+
+      {% if result %}
+      <section class="block">
+        <h2 class="section-title">2. Pemodelan Noise Gaussian</h2>
+        <div class="grid-2">
+          <div class="card">
+            <h3>Citra Rusak</h3>
+            <img src="{{ result.noisy_data }}" class="preview" alt="Noisy image" />
+          </div>
+          <div class="card">
+            <h3>Metrik Degradasi Awal</h3>
+            <div class="metric-grid">
+              <div class="metric-card">
+                <strong>RMSE</strong>
+                <span>{{ result.noise_metrics.rmse }}</span>
+              </div>
+              <div class="metric-card">
+                <strong>PSNR</strong>
+                <span>{{ result.noise_metrics.psnr }} dB</span>
+              </div>
+              <div class="metric-card">
+                <strong>SNR</strong>
+                <span>{{ result.noise_metrics.snr }} dB</span>
+              </div>
+              <div class="metric-card" style="grid-column: span 2;">
+                <strong>Varians Noise</strong>
+                <span>{{ form_data.noise_var }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="block">
+        <h2 class="section-title">3. Pemrosesan Denoising</h2>
+        <div class="tabs-wrapper">
+          <div class="tabs">
+            <button class="tab-button active" data-tab="tab-wt">Metode WT Murni</button>
+            <button class="tab-button" data-tab="tab-svd">Metode SVD Murni</button>
+            <button class="tab-button" data-tab="tab-wtsvd">Kombinasi WT-SVD</button>
+          </div>
+
+          <div class="tab-note">
+            Pilih tab untuk melihat preview dan metrik dari setiap metode denoising.
+          </div>
+
+          <div class="tab-content active" id="tab-wt">
+            <div class="grid-2">
+              <div class="card">
+                <h3>Hasil WT Murni</h3>
+                <img src="{{ result.wt_data }}" class="preview" alt="WT result" />
+              </div>
+              <div class="card">
+                <h3>Metrik WT Murni</h3>
+                <div class="metric-grid">
+                  <div class="metric-card">
+                    <strong>RMSE</strong>
+                    <span>{{ result.wt_metrics.rmse }}</span>
+                  </div>
+                  <div class="metric-card">
+                    <strong>PSNR</strong>
+                    <span>{{ result.wt_metrics.psnr }} dB</span>
+                  </div>
+                  <div class="metric-card">
+                    <strong>SNR</strong>
+                    <span>{{ result.wt_metrics.snr }} dB</span>
+                  </div>
+                  <div class="metric-card" style="grid-column: span 2;">
+                    <strong>Threshold Multiplier</strong>
+                    <span>{{ form_data.wt_multiplier }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="tab-content" id="tab-svd">
+            <div class="grid-2">
+              <div class="card">
+                <h3>Hasil SVD Murni</h3>
+                <img src="{{ result.svd_data }}" class="preview" alt="SVD result" />
+              </div>
+              <div class="card">
+                <h3>Metrik SVD Murni</h3>
+                <div class="metric-grid">
+                  <div class="metric-card">
+                    <strong>RMSE</strong>
+                    <span>{{ result.svd_metrics.rmse }}</span>
+                  </div>
+                  <div class="metric-card">
+                    <strong>PSNR</strong>
+                    <span>{{ result.svd_metrics.psnr }} dB</span>
+                  </div>
+                  <div class="metric-card">
+                    <strong>SNR</strong>
+                    <span>{{ result.svd_metrics.snr }} dB</span>
+                  </div>
+                  <div class="metric-card" style="grid-column: span 2;">
+                    <strong>Rank SVD</strong>
+                    <span>{{ form_data.k_svd }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="tab-content" id="tab-wtsvd">
+            <div class="grid-2">
+              <div class="card">
+                <h3>Hasil Kombinasi WT-SVD</h3>
+                <img src="{{ result.wtsvd_data }}" class="preview" alt="WT-SVD result" />
+              </div>
+              <div class="card">
+                <h3>Metrik WT-SVD</h3>
+                <div class="metric-grid">
+                  <div class="metric-card">
+                    <strong>RMSE</strong>
+                    <span>{{ result.wtsvd_metrics.rmse }}</span>
+                  </div>
+                  <div class="metric-card">
+                    <strong>PSNR</strong>
+                    <span>{{ result.wtsvd_metrics.psnr }} dB</span>
+                  </div>
+                  <div class="metric-card">
+                    <strong>SNR</strong>
+                    <span>{{ result.wtsvd_metrics.snr }} dB</span>
+                  </div>
+                  <div class="metric-card" style="grid-column: span 2;">
+                    <strong>Rank LL WT-SVD</strong>
+                    <span>{{ form_data.k_wtsvd }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="block">
+        <div class="card">
+          <h2 class="section-title">4. Tabel Komparasi Metrik Evaluasi Akhir</h2>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Metrik Evaluasi</th>
+                  <th>Citra Noisy</th>
+                  <th>WT Murni</th>
+                  <th>SVD Murni</th>
+                  <th>WT-SVD</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in result.metrics_table %}
+                <tr>
+                  <td>{{ row.label }}</td>
+                  <td>{{ row.original }}</td>
+                  <td>{{ row.wt }}</td>
+                  <td>{{ row.svd }}</td>
+                  <td>{{ row.wtsvd }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+      {% endif %}
+    </div>
+  </main>
+
+  <script>
+    const input = document.getElementById('image');
+    const preview = document.getElementById('preview-img');
+    const form = document.getElementById('main-form');
+
+    input.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) { preview.style.display = 'none'; return; }
+      const reader = new FileReader();
+      reader.onload = function(ev) {
+        preview.src = ev.target.result;
+        preview.style.display = 'block';
+      };
+      reader.readAsDataURL(file);
+    });
+
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const file = input.files[0];
+      const fd = new FormData();
+      fd.append('noise_var', document.getElementById('noise_var').value);
+      fd.append('wt_multiplier', document.getElementById('wt_multiplier').value);
+      fd.append('k_svd', document.getElementById('k_svd').value);
+      fd.append('k_wtsvd', document.getElementById('k_wtsvd').value);
+
+      if (file) {
+        const dataUrl = await new Promise((res) => {
+          const r = new FileReader();
+          r.onload = () => res(r.result);
+          r.readAsDataURL(file);
+        });
+        const img = new Image();
+        img.src = dataUrl;
+        await new Promise((res) => img.onload = res);
+
+        const maxDim = 1024;
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+        fd.append('image', blob, file.name.replace(/\.[^.]+$/, '.jpg'));
+      }
+
+      const resp = await fetch('/', { method: 'POST', body: fd });
+      const text = await resp.text();
+      document.open();
+      document.write(text);
+      document.close();
+    });
+
+    function attachTabs() {
+      const buttons = document.querySelectorAll('.tab-button');
+      const panels = document.querySelectorAll('.tab-content');
+
+      buttons.forEach((button) => {
+        button.addEventListener('click', () => {
+          buttons.forEach((btn) => btn.classList.remove('active'));
+          panels.forEach((panel) => panel.classList.remove('active'));
+
+          button.classList.add('active');
+          document.getElementById(button.dataset.tab).classList.add('active');
+        });
+      });
+    }
+
+    attachTabs();
+  </script>
+</body>
+</html>
