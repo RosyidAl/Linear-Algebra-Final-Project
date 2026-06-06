@@ -1,0 +1,11 @@
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.build
+*/.DS_Store
+
+# Ignore local Streamlit config if you want default Vercel behavior
+.streamlit/

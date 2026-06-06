@@ -1,4 +1,3 @@
-import streamlit as st
 import numpy as np
 from PIL import Image
 import base64
@@ -22,7 +21,6 @@ def add_gaussian_noise(img: np.ndarray, noise_var: float, seed: int = 42, max_pi
     return np.clip(noisy_img, 0, max_pixel).astype(np.uint8), sigma
 
 
-@st.cache_data(show_spinner=False)
 def haar_dwt_2d(img: np.ndarray):
     img = img.astype(np.float64)
     h, w = img.shape
@@ -45,7 +43,6 @@ def soft_threshold(data: np.ndarray, threshold: float):
     return np.sign(data) * np.maximum(np.abs(data) - threshold, 0)
 
 
-@st.cache_data(show_spinner=False)
 def apply_svd_matrix(matrix: np.ndarray, k: int):
     img_data = matrix.astype(np.float64)
     U, S, Vt = np.linalg.svd(img_data, full_matrices=False)
