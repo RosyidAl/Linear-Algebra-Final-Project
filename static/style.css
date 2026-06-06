@@ -1,4 +1,5 @@
- :root {
+/* Global color palette */
+:root {
   --primary: #0284C7;
   --primary-hover: #0369A1;
   --primary-light: #E0F2FE;
@@ -11,70 +12,222 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Cabinet+Grotesk:wght@700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
-/* Menghilangkan Bar Native Streamlit (Deploy & Menu) dan Footer */
-header[data-testid="stHeader"], 
-div[data-testid="stHeader"],
-footer {
-  display: none !important;
-  visibility: hidden !important;
+* {
+  box-sizing: border-box;
 }
 
-/* Latar Belakang Luar Berdimensi */
-body, .stApp, div[data-testid="stAppViewContainer"] {
-  background-color: #F8FAFC !important;
-  font-family: 'Plus Jakarta Sans', sans-serif !important;
+body {
   margin: 0;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  background: #F8FAFC;
+  color: var(--text-body);
 }
 
-.main .block-container {
-  background-color: var(--bg-card) !important;
-  padding: 3rem 5rem 4rem 5rem !important; 
-  border-radius: 24px !important;
-  box-shadow: 0 20px 40px -15px rgba(15, 23, 42, 0.05) !important;
-  margin-top: 6.5rem !important; 
-  margin-bottom: 4rem !important;
-  max-width: 1350px !important;
-  border: 1px solid var(--border-color) !important;
-}
-
-/* Header */
 .custom-header {
-  position: fixed !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  width: 100% !important;
-  height: 70px !important;
-  z-index: 99999 !important;
-  display: flex !important;
-  justify-content: space-between !important;
-  align-items: center !important;
-  padding: 0 6rem !important; 
-  background-color: #FFFFFF !important; 
-  border-bottom: 1px solid var(--border-color) !important;
-  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.03) !important;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 78px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 2.5rem;
+  background: #FFFFFF;
+  border-bottom: 1px solid #E2E8F0;
+  z-index: 20;
 }
 
-.custom-header .brand-name { font-weight: 800; font-family: 'Cabinet Grotesk', serif; }
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.logo-icon {
+  background: linear-gradient(135deg, var(--primary), #38BDF8);
+  color: #ffffff;
+  padding: 0.6rem 1rem;
+  border-radius: 12px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.brand-name {
+  font-family: 'Cabinet Grotesk', sans-serif;
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.header-right .status-badge {
+  background: linear-gradient(135deg, #E0F2FE, #BAE6FD);
+  color: #0369A1;
+  padding: 0.45rem 1rem;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.main {
+  max-width: 1300px;
+  margin: 0 auto;
+  padding: 6rem 2rem 3rem;
+}
+
+.block-container {
+  background: white;
+  border-radius: 24px;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 30px 70px rgba(15, 23, 42, 0.08);
+  padding: 3rem;
+}
 
 .block {
-  padding: 2rem 0;
+  margin-bottom: 2.5rem;
 }
 
-.grid {
-  display: grid; grid-template-columns: 1fr 350px; gap: 2rem;
+.section-title {
+  font-size: 1.9rem;
+  margin-bottom: 1.2rem;
+  color: var(--text-title);
 }
 
-.card { padding: 1.25rem; border-radius: 16px; background: white; border: 1px solid var(--border-color); box-shadow: 0 4px 12px rgba(15,23,42,0.04); }
+.grid-2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) 0.8fr;
+  gap: 2rem;
+}
 
-.file-uploader { border: 2px dashed var(--primary); padding: 1.5rem; border-radius: 16px; background: linear-gradient(180deg, var(--primary-light), #E8F9FF); }
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem;
+}
 
-.metrics { margin-top: 1rem; }
+.card {
+  background: white;
+  border: 1px solid #E2E8F0;
+  border-radius: 22px;
+  padding: 1.75rem;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+}
 
-img.preview { width: 100%; border-radius: 12px; display: block; }
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
 
-@media (max-width: 900px) {
-  .grid { grid-template-columns: 1fr; }
-  .custom-header { padding: 0 1.25rem !important; }
-  .main .block-container { padding: 2rem !important; }
+.metric-card {
+  padding: 1rem 1.15rem;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 18px;
+}
+
+.metric-card strong {
+  display: block;
+  color: var(--text-muted);
+  margin-bottom: 0.35rem;
+}
+
+.metric-card span {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-title);
+}
+
+.field-group,
+.field-row {
+  margin-bottom: 1.3rem;
+}
+
+label {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 0.45rem;
+}
+
+input[type="file"], select, input[type="number"] {
+  width: 100%;
+  padding: 0.95rem 1rem;
+  border: 1px solid #CBD5E1;
+  border-radius: 16px;
+  background: #F8FAFC;
+  font-family: inherit;
+  font-size: 1rem;
+}
+
+.file-uploader {
+  border: 2px dashed var(--primary);
+  border-radius: 18px;
+  padding: 1.5rem;
+  background: linear-gradient(180deg, #EFF6FF, #F8FDFF);
+}
+
+.note {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+button.button {
+  border: none;
+  border-radius: 16px;
+  background: var(--primary);
+  color: white;
+  font-weight: 700;
+  padding: 1rem 1.4rem;
+  cursor: pointer;
+}
+
+button.button:hover {
+  background: var(--primary-hover);
+}
+
+.images-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+img.preview {
+  width: 100%;
+  border-radius: 18px;
+  border: 1px solid #E2E8F0;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  padding: 1rem;
+  border: 1px solid #E2E8F0;
+  text-align: left;
+}
+
+th {
+  background: #F8FAFC;
+}
+
+tbody tr:nth-child(even) {
+  background: #F8FAFC;
+}
+
+@media (max-width: 1024px) {
+  .grid-2,
+  .grid-3 {
+    grid-template-columns: 1fr;
+  }
+  .custom-header {
+    padding: 0 1.25rem;
+  }
+  .main {
+    padding: 5rem 1rem 2rem;
+  }
 }

@@ -13,23 +13,24 @@
       <div class="brand-name">WT-SVD Denoising Evaluator</div>
     </div>
     <div class="header-right">
-      <div class="status-badge">Demo</div>
+      <div class="status-badge">Deploy Demo</div>
     </div>
   </div>
 
   <main class="main">
     <div class="block-container">
-      <div class="block grid">
-        <div>
-          <section class="card">
-            <h2>Pengaturan Input</h2>
+      <section class="block">
+        <h2 class="section-title">1. Citra Asli & Properti</h2>
+        <div class="grid-2">
+          <div class="card">
             <form id="main-form" method="post" enctype="multipart/form-data">
               <div class="field-group">
                 <label for="image">Unggah Citra Medis (PNG / JPG / BMP)</label>
                 <div class="file-uploader">
                   <input type="file" id="image" name="image" accept="image/png, image/jpeg, image/bmp" />
-                  <small>Biarkan kosong untuk menggunakan citra contoh sintetis.</small>
+                  <p class="note">Biarkan kosong untuk menggunakan citra contoh sintetis.</p>
                 </div>
+                <img id="preview-img" class="preview" src="" alt="Preview" style="display:none; margin-top: 1rem;" />
               </div>
 
               <div class="field-row">
@@ -58,50 +59,158 @@
 
               <button type="submit" class="button">Proses Sekarang</button>
             </form>
-          </section>
-        </div>
+          </div>
 
-        <aside>
-          <section class="card">
-            <h3>Preview</h3>
-            <img id="preview-img" class="preview" src="" alt="Preview" style="display:none" />
-          </section>
-        </aside>
-      </div>
+          <div class="card">
+            <h3>Properti Gambar</h3>
+            {% if result %}
+            <div class="metric-grid">
+              <div class="metric-card">
+                <strong>Resolusi Spasial</strong>
+                <span>{{ result.original_props.resolution }}</span>
+              </div>
+              <div class="metric-card">
+                <strong>Aspek Rasio</strong>
+                <span>{{ result.original_props.aspect_ratio }}</span>
+              </div>
+              <div class="metric-card">
+                <strong>Ukuran File</strong>
+                <span>{{ result.original_props.file_size }}</span>
+              </div>
+              <div class="metric-card">
+                <strong>Total Piksel</strong>
+                <span>{{ result.original_props.total_pixels }}</span>
+              </div>
+              <div class="metric-card">
+                <strong>Piksel Terendah</strong>
+                <span>{{ result.original_props.min_pixel }}</span>
+              </div>
+              <div class="metric-card">
+                <strong>Piksel Tertinggi</strong>
+                <span>{{ result.original_props.max_pixel }}</span>
+              </div>
+              <div class="metric-card" style="grid-column: span 2;">
+                <strong>Intensitas Rata-rata</strong>
+                <span>{{ result.original_props.mean_pixel }}</span>
+              </div>
+            </div>
+            {% else %}
+            <p class="note">Setelah mengunggah citra dan menekan Proses Sekarang, properti gambar akan muncul di sini.</p>
+            {% endif %}
+          </div>
+        </div>
+      </section>
 
       {% if result %}
-      <div class="block">
-        <section class="card">
-          <h2>Hasil Denoising</h2>
-          <div class="grid">
-            <div>
-              <h4>Citra Asli</h4>
-              <img src="{{ result.original_data }}" class="preview" />
+      <section class="block">
+        <h2 class="section-title">2. Pemodelan Noise Gaussian</h2>
+        <div class="grid-2">
+          <div class="card">
+            <h3>Citra Rusak</h3>
+            <img src="{{ result.noisy_data }}" class="preview" alt="Noisy image" />
+          </div>
+          <div class="card">
+            <h3>Metrik Degradasi Awal</h3>
+            <div class="metric-grid">
+              <div class="metric-card">
+                <strong>RMSE</strong>
+                <span>{{ result.noise_metrics.rmse }}</span>
+              </div>
+              <div class="metric-card">
+                <strong>PSNR</strong>
+                <span>{{ result.noise_metrics.psnr }} dB</span>
+              </div>
+              <div class="metric-card">
+                <strong>SNR</strong>
+                <span>{{ result.noise_metrics.snr }} dB</span>
+              </div>
+              <div class="metric-card" style="grid-column: span 2;">
+                <strong>Varians Noise</strong>
+                <span>{{ form_data.noise_var }}</span>
+              </div>
             </div>
-            <div>
-              <h4>Citra Noisy</h4>
-              <img src="{{ result.noisy_data }}" class="preview" />
-            </div>
-            <div>
-              <h4>WT Murni</h4>
-              <img src="{{ result.wt_data }}" class="preview" />
-            </div>
-            <div>
-              <h4>SVD Murni</h4>
-              <img src="{{ result.svd_data }}" class="preview" />
-            </div>
-            <div>
-              <h4>WT-SVD</h4>
-              <img src="{{ result.wtsvd_data }}" class="preview" />
+          </div>
+        </div>
+      </section>
+
+      <section class="block">
+        <h2 class="section-title">3. Pemrosesan Denoising</h2>
+        <div class="grid-3">
+          <div class="card">
+            <h3>WT Murni</h3>
+            <img src="{{ result.wt_data }}" class="preview" alt="WT result" />
+            <div class="metric-grid">
+              <div class="metric-card">
+                <strong>RMSE</strong>
+                <span>{{ result.wt_metrics.rmse }}</span>
+              </div>
+              <div class="metric-card">
+                <strong>PSNR</strong>
+                <span>{{ result.wt_metrics.psnr }} dB</span>
+              </div>
+              <div class="metric-card">
+                <strong>SNR</strong>
+                <span>{{ result.wt_metrics.snr }} dB</span>
+              </div>
             </div>
           </div>
 
-          <div class="metrics">
-            <h3>Perbandingan Metrik</h3>
+          <div class="card">
+            <h3>SVD Murni</h3>
+            <img src="{{ result.svd_data }}" class="preview" alt="SVD result" />
+            <div class="metric-grid">
+              <div class="metric-card">
+                <strong>RMSE</strong>
+                <span>{{ result.svd_metrics.rmse }}</span>
+              </div>
+              <div class="metric-card">
+                <strong>PSNR</strong>
+                <span>{{ result.svd_metrics.psnr }} dB</span>
+              </div>
+              <div class="metric-card">
+                <strong>SNR</strong>
+                <span>{{ result.svd_metrics.snr }} dB</span>
+              </div>
+              <div class="metric-card" style="grid-column: span 2;">
+                <strong>Rank SVD</strong>
+                <span>{{ form_data.k_svd }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>WT-SVD</h3>
+            <img src="{{ result.wtsvd_data }}" class="preview" alt="WT-SVD result" />
+            <div class="metric-grid">
+              <div class="metric-card">
+                <strong>RMSE</strong>
+                <span>{{ result.wtsvd_metrics.rmse }}</span>
+              </div>
+              <div class="metric-card">
+                <strong>PSNR</strong>
+                <span>{{ result.wtsvd_metrics.psnr }} dB</span>
+              </div>
+              <div class="metric-card">
+                <strong>SNR</strong>
+                <span>{{ result.wtsvd_metrics.snr }} dB</span>
+              </div>
+              <div class="metric-card" style="grid-column: span 2;">
+                <strong>Rank LL WT-SVD</strong>
+                <span>{{ form_data.k_wtsvd }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="block">
+        <div class="card">
+          <h2 class="section-title">4. Tabel Komparasi Metrik Evaluasi Akhir</h2>
+          <div class="table-wrapper">
             <table>
               <thead>
                 <tr>
-                  <th>Metrik</th>
+                  <th>Metrik Evaluasi</th>
                   <th>Citra Noisy</th>
                   <th>WT Murni</th>
                   <th>SVD Murni</th>
@@ -121,73 +230,65 @@
               </tbody>
             </table>
           </div>
-        </section>
-      </div>
+        </div>
+      </section>
       {% endif %}
-
     </div>
   </main>
 
   <script>
-  // Client-side image resize before upload to avoid Vercel payload limits
-  const input = document.getElementById('image');
-  const preview = document.getElementById('preview-img');
-  const form = document.getElementById('main-form');
+    const input = document.getElementById('image');
+    const preview = document.getElementById('preview-img');
+    const form = document.getElementById('main-form');
 
-  input.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (!file) { preview.style.display = 'none'; return; }
-    const reader = new FileReader();
-    reader.onload = function(ev) {
-      preview.src = ev.target.result;
-      preview.style.display = 'block';
-    }
-    reader.readAsDataURL(file);
-  });
+    input.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) { preview.style.display = 'none'; return; }
+      const reader = new FileReader();
+      reader.onload = function(ev) {
+        preview.src = ev.target.result;
+        preview.style.display = 'block';
+      };
+      reader.readAsDataURL(file);
+    });
 
-  form.addEventListener('submit', async (ev) => {
-    ev.preventDefault();
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const file = input.files[0];
+      const fd = new FormData();
+      fd.append('noise_var', document.getElementById('noise_var').value);
+      fd.append('wt_multiplier', document.getElementById('wt_multiplier').value);
+      fd.append('k_svd', document.getElementById('k_svd').value);
+      fd.append('k_wtsvd', document.getElementById('k_wtsvd').value);
 
-    const file = input.files[0];
-    const fd = new FormData();
+      if (file) {
+        const dataUrl = await new Promise((res) => {
+          const r = new FileReader();
+          r.onload = () => res(r.result);
+          r.readAsDataURL(file);
+        });
+        const img = new Image();
+        img.src = dataUrl;
+        await new Promise((res) => img.onload = res);
 
-    // append numeric fields
-    fd.append('noise_var', document.getElementById('noise_var').value);
-    fd.append('wt_multiplier', document.getElementById('wt_multiplier').value);
-    fd.append('k_svd', document.getElementById('k_svd').value);
-    fd.append('k_wtsvd', document.getElementById('k_wtsvd').value);
+        const maxDim = 1024;
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-    if (file) {
-      // resize image using canvas
-      const img = new Image();
-      const dataUrl = await new Promise((res) => {
-        const r = new FileReader();
-        r.onload = () => res(r.result);
-        r.readAsDataURL(file);
-      });
-      img.src = dataUrl;
-      await new Promise((res) => img.onload = res);
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+        fd.append('image', blob, file.name.replace(/\.[^.]+$/, '.jpg'));
+      }
 
-      const maxDim = 1024; // max width/height
-      let { width, height } = img;
-      let scale = Math.min(1, maxDim / Math.max(width, height));
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round(width * scale);
-      canvas.height = Math.round(height * scale);
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.8));
-      fd.append('image', blob, file.name.replace(/\.[^.]+$/, '.jpg'));
-    }
-
-    // submit via fetch and replace page content with response
-    const resp = await fetch('/', { method: 'POST', body: fd });
-    const text = await resp.text();
-    document.open();
-    document.write(text);
-    document.close();
-  });
+      const resp = await fetch('/', { method: 'POST', body: fd });
+      const text = await resp.text();
+      document.open();
+      document.write(text);
+      document.close();
+    });
   </script>
 </body>
 </html>

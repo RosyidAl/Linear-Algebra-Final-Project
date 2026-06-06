@@ -76,15 +76,21 @@ def make_metrics_table(original, noisy, img_wt, img_svd, img_wtsvd, energy_svd, 
 def process_image(file_bytes, noise_var, wt_multiplier, k_svd, k_wtsvd):
     if file_bytes is None:
         original = generate_synthetic_mri()
+        file_size = 0
     else:
         try:
             pil = Image.open(io.BytesIO(file_bytes)).convert("L")
             original = np.array(pil)
+            file_size = len(file_bytes)
         except Exception:
             original = generate_synthetic_mri()
+            file_size = 0
 
     original = ensure_even_dimensions(original)
+    h, w = original.shape
     noisy_img, sigma = add_gaussian_noise(original, noise_var)
+
+    rmse_n, psnr_n, snr_n = calculate_all_metrics(original, noisy_img)
 
     LL, HL, LH, HH = haar_dwt_2d(noisy_img)
     threshold = sigma * math.sqrt(2 * math.log(original.size)) * wt_multiplier
@@ -99,6 +105,10 @@ def process_image(file_bytes, noise_var, wt_multiplier, k_svd, k_wtsvd):
     LL_denoised, energy_wtsvd = apply_svd_matrix(LL, k_wtsvd)
     img_wtsvd = haar_idwt_2d(LL_denoised, HL_t, LH_t, HH_t).astype(np.uint8)
 
+    rmse_wt, psnr_wt, snr_wt = calculate_all_metrics(original, img_wt)
+    rmse_svd, psnr_svd, snr_svd = calculate_all_metrics(original, img_svd)
+    rmse_wtsvd, psnr_wtsvd, snr_wtsvd = calculate_all_metrics(original, img_wtsvd)
+
     return {
         "original": original,
         "noisy": noisy_img,
@@ -108,6 +118,35 @@ def process_image(file_bytes, noise_var, wt_multiplier, k_svd, k_wtsvd):
         "sigma": sigma,
         "energy_svd": energy_svd,
         "energy_wtsvd": energy_wtsvd,
+        "original_props": {
+            "resolution": f"{w} x {h} px",
+            "aspect_ratio": f"{w/h:.2f}:1",
+            "file_size": f"{file_size/1024:.2f} KB",
+            "total_pixels": f"{original.size:,}",
+            "min_pixel": int(np.min(original)),
+            "max_pixel": int(np.max(original)),
+            "mean_pixel": f"{np.mean(original):.2f}",
+        },
+        "noise_metrics": {
+            "rmse": f"{rmse_n:.2f}",
+            "psnr": f"{psnr_n:.2f}",
+            "snr": f"{snr_n:.2f}",
+        },
+        "wt_metrics": {
+            "rmse": f"{rmse_wt:.4f}",
+            "psnr": f"{psnr_wt:.4f}",
+            "snr": f"{snr_wt:.4f}",
+        },
+        "svd_metrics": {
+            "rmse": f"{rmse_svd:.4f}",
+            "psnr": f"{psnr_svd:.4f}",
+            "snr": f"{snr_svd:.4f}",
+        },
+        "wtsvd_metrics": {
+            "rmse": f"{rmse_wtsvd:.4f}",
+            "psnr": f"{psnr_wtsvd:.4f}",
+            "snr": f"{snr_wtsvd:.4f}",
+        },
     }
 
 
