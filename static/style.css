@@ -352,3 +352,62 @@ tbody tr:nth-child(even) {
     padding: 5rem 1rem 2rem;
   }
 }
+
+.theme-toggle {
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 0.4rem 0.75rem;
+  font-size: 1.1rem;
+  cursor: pointer;
+  margin-right: 0.75rem;
+}
+
+body.dark {
+  background: #0F172A;
+  color: #CBD5E1;
+}
+
+body.dark .custom-header {
+  background: #1E293B;
+  border-color: #334155;
+}
+
+body.dark .block-container,
+body.dark .card {
+  background: #1E293B;
+  border-color: #334155;
+}
+
+body.dark .metric-card {
+  background: #0F172A;
+  border-color: #334155;
+}
+
+body.dark .metric-card span {
+  color: #F1F5F9;
+}
+
+body.dark th {
+  background: #0F172A;
+}
+
+body.dark tbody tr:nth-child(even) {
+  background: #0F172A;
+}
+
+body.dark input[type="file"],
+body.dark select,
+body.dark input[type="number"] {
+  background: #0F172A;
+  border-color: #475569;
+  color: #CBD5E1;
+}
+
+body.dark .section-title {
+  color: #F1F5F9;
+}
+
+body.dark th, body.dark td {
+  border-color: #334155;
+}
